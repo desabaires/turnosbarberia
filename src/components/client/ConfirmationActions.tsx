@@ -1,6 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
 import { Icon } from '@/components/shared/Icon';
+import { SHOP, PRODUCT } from '@/lib/shop-info';
 
 function pad(n: number) { return String(n).padStart(2, '0'); }
 function toICSDate(d: Date) {
@@ -21,25 +22,27 @@ export function ConfirmationActions({
   const { icsHref, gcalHref, shareText } = useMemo(() => {
     const start = new Date(startISO);
     const end = new Date(endISO);
-    const title = `Turno en El Estudio · ${service}`;
-    const details = `Con ${barber}. N° ${orderNum}. Dirección: Av. Honduras 5850, Palermo, Buenos Aires.`;
-    const location = 'Av. Honduras 5850, Palermo, Buenos Aires';
+    const title = `Turno en ${SHOP.name} · ${service}`;
+    const addressLine = SHOP.address ? `${SHOP.address}${SHOP.city ? `, ${SHOP.city}` : ''}` : SHOP.city;
+    const details = `Con ${barber}. N° ${orderNum}${addressLine ? `. Dirección: ${addressLine}` : ''}.`;
+    const location = addressLine;
+    const uidDomain = PRODUCT.name.toLowerCase().replace(/[^a-z0-9]/g, '');
 
     const ics = [
       'BEGIN:VCALENDAR',
       'VERSION:2.0',
-      'PRODID:-//El Estudio//Turnos//ES',
+      `PRODID:-//${PRODUCT.name}//Turnos//ES`,
       'BEGIN:VEVENT',
-      `UID:${orderNum}@elestudio.app`,
+      `UID:${orderNum}@${uidDomain}.app`,
       `DTSTAMP:${toICSDate(new Date())}`,
       `DTSTART:${toICSDate(start)}`,
       `DTEND:${toICSDate(end)}`,
       `SUMMARY:${title}`,
       `DESCRIPTION:${details}`,
-      `LOCATION:${location}`,
+      location ? `LOCATION:${location}` : '',
       'END:VEVENT',
       'END:VCALENDAR'
-    ].join('\r\n');
+    ].filter(Boolean).join('\r\n');
 
     const icsHref = `data:text/calendar;charset=utf-8,${encodeURIComponent(ics)}`;
     const gcalHref =
@@ -47,9 +50,9 @@ export function ConfirmationActions({
       `&text=${encodeURIComponent(title)}` +
       `&dates=${toICSDate(start)}/${toICSDate(end)}` +
       `&details=${encodeURIComponent(details)}` +
-      `&location=${encodeURIComponent(location)}`;
+      (location ? `&location=${encodeURIComponent(location)}` : '');
 
-    const shareText = `Reservé turno en El Estudio: ${service} con ${barber}, ${start.toLocaleString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}hs.`;
+    const shareText = `Reservé turno en ${SHOP.name}: ${service} con ${barber}, ${start.toLocaleString('es-AR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false })}hs.`;
     return { icsHref, gcalHref, shareText };
   }, [startISO, endISO, service, barber, orderNum]);
 
@@ -57,7 +60,7 @@ export function ConfirmationActions({
 
   const onShare = async () => {
     try {
-      await (navigator as any).share({ title: 'Turno · El Estudio', text: shareText });
+      await (navigator as any).share({ title: `Turno · ${SHOP.name}`, text: shareText });
       setShared('ok');
     } catch {
       setShared('fail');
@@ -68,7 +71,7 @@ export function ConfirmationActions({
     <div className="mt-5 flex flex-col gap-2">
       <a
         href={icsHref}
-        download={`turno-elestudio-${orderNum}.ics`}
+        download={`turno-${orderNum}.ics`}
         className="bg-ink text-bg px-4 py-4 rounded-xl text-[15px] font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition"
       >
         <Icon name="calendar" size={16} color="#F5F3EE" />

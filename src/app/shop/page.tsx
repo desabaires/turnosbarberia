@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { ShopHeader, ShopTabs } from '@/components/shop/ShopHeader';
 import { ShopTabBar } from '@/components/shop/ShopTabBar';
 import { AgendaView } from '@/components/shop/AgendaView';
+import { SHOP } from '@/lib/shop-info';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,7 +25,7 @@ export default async function ShopAgendaPage({ searchParams }: { searchParams: {
 
   return (
     <main className="min-h-screen flex flex-col">
-      <ShopHeader subtitle="Dashboard" title="El Estudio · Palermo" action="search"/>
+      <ShopHeader subtitle="Dashboard" title={SHOP.name} action="search"/>
       <ShopTabs active="agenda"/>
       <AgendaView appointments={(appts as any) || []} barbers={barbers || []} dayISO={dayISO}/>
       <ShopTabBar/>

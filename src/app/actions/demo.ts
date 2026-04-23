@@ -104,14 +104,14 @@ async function ensureDemoData(): Promise<string | null> {
   const seeds: Seed[] = [
     { time: '10:00', barber: 'tomas', service: 'Corte + Barba',     name: 'Matías R.',  status: 'completed' },
     { time: '10:30', barber: 'ivan',  service: 'Corte de pelo',     name: 'Fede L.',    status: 'completed' },
-    { time: '11:00', barber: 'lucas', service: 'Arreglo de barba',  name: 'Juan P.',    status: 'in_progress' },
+    { time: '11:00', barber: 'nico', service: 'Arreglo de barba',  name: 'Juan P.',    status: 'in_progress' },
     { time: '11:30', barber: 'tomas', service: 'Corte de pelo',     name: 'Santi G.',   status: 'confirmed' },
     { time: '12:00', barber: 'ivan',  service: 'Diseño · Navaja',   name: 'Nacho V.',   status: 'confirmed' },
     { time: '14:00', barber: 'tomas', service: 'Corte + Barba',     name: 'Bruno A.',   status: 'confirmed' },
-    { time: '14:30', barber: 'lucas', service: 'Corte de pelo',     name: 'Pedro M.',   status: 'confirmed' },
+    { time: '14:30', barber: 'nico', service: 'Corte de pelo',     name: 'Pedro M.',   status: 'confirmed' },
     { time: '15:30', barber: 'ivan',  service: 'Corte de pelo',     name: 'Joaquín D.', status: 'confirmed' },
     { time: '16:00', barber: 'tomas', service: 'Arreglo de barba',  name: 'Agustín B.', status: 'confirmed' },
-    { time: '17:00', barber: 'lucas', service: 'Corte + Barba',     name: 'Martín K.',  status: 'confirmed' }
+    { time: '17:00', barber: 'nico', service: 'Corte + Barba',     name: 'Martín K.',  status: 'confirmed' }
   ];
 
   // Demo client's own upcoming appointment today (different time so no conflict with above)
@@ -133,7 +133,7 @@ async function ensureDemoData(): Promise<string | null> {
       service_id: svc.id,
       customer_name: s.name,
       customer_phone: '+54 9 11 5500 0000',
-      customer_email: s.clientLink ? DEMO.cliente.email : 'demo@elestudio.app',
+      customer_email: s.clientLink ? DEMO.cliente.email : 'demo@turnosbarberia.app',
       starts_at: start.toISOString(),
       ends_at: end.toISOString(),
       status: s.status,

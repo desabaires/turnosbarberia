@@ -1,16 +1,17 @@
-# 💈 El Estudio · BarberShop
+# 💈 TurnosBarbería
 
-Webapp de turnos para barbería · Next.js 14 + Supabase + Vercel.
+Webapp SaaS de turnos para barberías · Next.js 14 + Supabase + Vercel.
 
-Mobile-first (390×844). Dos vistas:
+Dos vistas (mobile-first, 390×844; responsive desktop en admin):
 - **Cliente** (`/`, `/reservar`, `/mis-turnos`, `/perfil`) — login con magic link, reserva en 3 pasos.
-- **Shop** (`/shop`, `/shop/caja`, `/shop/equipo`) — agenda del día, caja del día, equipo y ocupación. Solo accesible para usuarios con `is_admin = true`.
+- **Shop/Admin** (`/shop`, `/shop/caja`, `/shop/equipo`) — agenda del día, caja, equipo y ocupación. Gateado por `is_admin = true` en `profiles`.
 
 ## Stack
 
 - Next.js 14 (App Router) + TypeScript + Tailwind CSS
 - Supabase: Postgres + Auth (magic link) + RLS + Realtime
 - Deploy: Vercel
+- Email: Resend
 
 ---
 
@@ -19,7 +20,7 @@ Mobile-first (390×844). Dos vistas:
 ```bash
 npm install
 cp .env.example .env.local
-# Editar .env.local con tus claves de Supabase
+# Editá .env.local con tus claves de Supabase
 npm run dev
 ```
 
@@ -32,27 +33,29 @@ Abrí http://localhost:3000
 | `NEXT_PUBLIC_SUPABASE_URL`        | Supabase → Project Settings → API → "Project URL" |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`   | Supabase → Project Settings → API → "anon public" |
 | `SUPABASE_SERVICE_ROLE_KEY`       | Supabase → Project Settings → API → "service_role" (¡nunca commitear!) |
-| `NEXT_PUBLIC_SITE_URL`            | URL pública del sitio (en local: `http://localhost:3000`; en prod: tu dominio Vercel) |
+| `NEXT_PUBLIC_SITE_URL`            | URL pública del sitio (en local: `http://localhost:3000`; en prod: dominio Vercel) |
+| `RESEND_API_KEY`                  | Resend → API Keys (opcional, para emails de confirmación) |
 
 ---
 
 ## Aplicar el schema a Supabase (una vez)
 
-**Opción A — Pegar en el SQL Editor del dashboard (más rápido):**
-1. Abrí https://supabase.com/dashboard/project/wrbyzqwfysdliiesbdab/sql/new
-2. Pegá el contenido de [`supabase/migrations/0001_init.sql`](./supabase/migrations/0001_init.sql) y "Run".
-3. Pegá el contenido de [`supabase/seed.sql`](./supabase/seed.sql) y "Run".
+**Opción A — SQL Editor (manual):**
+1. Abrí el SQL Editor del dashboard de Supabase.
+2. Pegá [`supabase/migrations/0001_init.sql`](./supabase/migrations/0001_init.sql) → Run.
+3. Pegá [`supabase/migrations/0002_fix_encoding.sql`](./supabase/migrations/0002_fix_encoding.sql) → Run.
+4. Pegá [`supabase/seed.sql`](./supabase/seed.sql) → Run.
 
-**Opción B — Programáticamente con psql/Node:**
+**Opción B — Programáticamente:**
 ```bash
 npm install pg --no-save
-node scripts/apply-schema.mjs "postgresql://postgres:TU_PASS@db.wrbyzqwfysdliiesbdab.supabase.co:5432/postgres"
+node scripts/apply-schema.mjs "postgresql://postgres.PROJECT_REF:PASSWORD@aws-1-us-west-2.pooler.supabase.com:5432/postgres"
 ```
-(El password lo encontrás en Supabase → Settings → Database → "Database password".)
+(Usá la connection string del pooler; la directa es IPv6-only.)
 
 ## Configurar Auth en Supabase
 
-1. **Site URL**: Supabase → Authentication → URL Configuration → poné tu URL de Vercel (ej: `https://elestudio.vercel.app`).
+1. **Site URL**: Supabase → Authentication → URL Configuration → poné tu URL de Vercel.
 2. **Redirect URLs**: agregar `https://tu-dominio.vercel.app/auth/callback` y `http://localhost:3000/auth/callback`.
 3. **Email templates** (opcional): customizar el "Magic Link" desde Authentication → Email Templates.
 
@@ -69,12 +72,11 @@ Luego va a `/shop` y tiene acceso al panel.
 ## Deploy a Vercel
 
 ```bash
-# Vía CLI:
 npx vercel --prod
-# Y cargar las 4 env vars en Vercel Dashboard → Project → Settings → Environment Variables.
+# Cargá las 5 env vars en Vercel Dashboard → Project → Settings → Environment Variables.
 ```
 
-O directo desde el dashboard de Vercel: "Import Git Repository" → seleccionar este repo → cargar las env vars → Deploy.
+O directo desde el dashboard de Vercel: "Import Git Repository" → seleccionar este repo → cargar env vars → Deploy.
 
 ---
 
@@ -98,7 +100,7 @@ src/
 │   │   └── ajustes/
 │   ├── api/availability/route.ts  # Slots disponibles
 │   ├── auth/callback/route.ts     # OAuth/magic link callback
-│   └── actions/                   # Server actions (auth, booking)
+│   └── actions/                   # Server actions (auth, booking, demo)
 ├── components/
 │   ├── shared/                    # Icon, Avatar, Pill, Stripe
 │   ├── client/                    # Pantallas cliente
@@ -106,12 +108,14 @@ src/
 ├── lib/
 │   ├── supabase/                  # browser/server/middleware
 │   ├── availability.ts            # Lógica de slots
-│   └── format.ts                  # money(), fechas AR
-├── types/db.ts                    # Tipos del esquema
+│   ├── format.ts                  # money(), fechas AR
+│   ├── shop-info.ts               # Info del shop (a reemplazar por lookup multi-tenant)
+│   └── demo.ts                    # Cuentas y flags de demo
+├── types/db.ts
 └── middleware.ts                  # Refresh de sesión Supabase
 
 supabase/
-├── migrations/0001_init.sql       # Schema + RLS + indices + realtime
+├── migrations/                    # Schema + RLS + indices + realtime
 └── seed.sql                       # Barberos, servicios, horarios, productos
 ```
 
@@ -127,10 +131,13 @@ npm run lint        # eslint
 
 ---
 
-## Próximos pasos / TODO
+## Roadmap
 
-- Emails de confirmación (Resend)
-- Realtime: suscribirse a `appointments` en `/shop` para refrescar agenda en vivo
-- Modal de "Cobrar servicio" / "Vender producto" en `/shop/caja`
-- Editor de horarios y barberos en `/shop/ajustes`
-- WhatsApp recordatorio 24hs antes
+- [ ] Multi-tenant: tabla `shops`, rutas por slug, onboarding del dueño
+- [ ] Desktop responsive para `/shop/*`
+- [ ] Emails de confirmación/cancelación con Resend
+- [ ] Realtime en `/shop` (suscribirse a `appointments`)
+- [ ] Modal de "Cobrar servicio" / "Vender producto" en `/shop/caja`
+- [ ] Editor de horarios y barberos en `/shop/ajustes`
+- [ ] Recordatorio WhatsApp 24hs antes
+- [ ] Landing page de venta

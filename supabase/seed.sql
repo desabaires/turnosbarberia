@@ -7,7 +7,7 @@ insert into public.barbers (name, slug, role, initials, hue, rating)
 values
   ('Tomás', 'tomas', 'Senior · 8 años', 'TM',  55, 4.9),
   ('Iván',  'ivan',  'Barbero · 4 años','IV', 200, 4.8),
-  ('Lucas', 'lucas', 'Barbero · 2 años','LC', 120, 4.7)
+  ('Nico',  'nico',  'Barbero · 2 años','NC', 120, 4.7)
 on conflict (slug) do update set
   name = excluded.name,
   role = excluded.role,

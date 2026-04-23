@@ -1,11 +1,12 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import { PRODUCT } from '@/lib/shop-info';
 
 export const metadata: Metadata = {
-  title: 'El Estudio · BarberShop',
-  description: 'Reservá tu turno en segundos. Sin llamadas, sin esperas.',
-  applicationName: 'El Estudio',
-  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'El Estudio' }
+  title: PRODUCT.name,
+  description: PRODUCT.tagline,
+  applicationName: PRODUCT.name,
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: PRODUCT.name }
 };
 
 export const viewport: Viewport = {

@@ -5,6 +5,7 @@ import { Icon } from '@/components/shared/Icon';
 import { Stripe } from '@/components/shared/Stripe';
 import { ConfirmationActions } from '@/components/client/ConfirmationActions';
 import { money } from '@/lib/format';
+import { SHOP } from '@/lib/shop-info';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,8 +82,8 @@ export default async function ConfirmationPage({ params }: { params: { id: strin
 
         <div className="px-5 py-4 flex items-center gap-3.5">
           <div className="text-[11px] text-muted flex-1">
-            Av. Honduras 5850<br />
-            Palermo · Buenos Aires
+            {SHOP.address ? (<>{SHOP.address}<br /></>) : null}
+            {SHOP.name}{SHOP.city ? ` · ${SHOP.city}` : ''}
           </div>
           <div
             className="w-14 h-14 rounded-s"

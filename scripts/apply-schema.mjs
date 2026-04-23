@@ -1,10 +1,14 @@
-// Aplica supabase/migrations/0001_init.sql + supabase/seed.sql al proyecto Supabase.
+// Aplica todas las migrations en supabase/migrations/ (en orden) + supabase/seed.sql.
 // Uso: node scripts/apply-schema.mjs <DATABASE_URL>
 // Donde DATABASE_URL es la "Connection string (URI)" de Settings → Database (con tu password).
 
 import fs from 'node:fs';
 import path from 'node:path';
+import dns from 'node:dns';
+import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+
+dns.setDefaultResultOrder('ipv4first');
 
 const url = process.argv[2] || process.env.DATABASE_URL;
 if (!url) {
@@ -25,22 +29,30 @@ try {
 
 const { Client } = pg;
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const migrationPath = path.join(root, 'supabase', 'migrations', '0001_init.sql');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const migrationsDir = path.join(root, 'supabase', 'migrations');
 const seedPath      = path.join(root, 'supabase', 'seed.sql');
 
-const sql1 = fs.readFileSync(migrationPath, 'utf8');
-const sql2 = fs.readFileSync(seedPath, 'utf8');
+const migrationFiles = fs.readdirSync(migrationsDir)
+  .filter((f) => f.endsWith('.sql'))
+  .sort();
 
 const client = new Client({ connectionString: url, ssl: { rejectUnauthorized: false } });
 
 console.log('▶ Conectando a Supabase…');
 await client.connect();
-console.log('▶ Aplicando migrations…');
-await client.query(sql1);
-console.log('  ✓ schema OK');
+
+for (const file of migrationFiles) {
+  console.log(`▶ Aplicando ${file}…`);
+  const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+  await client.query(sql);
+  console.log(`  ✓ ${file} OK`);
+}
+
 console.log('▶ Aplicando seed…');
-await client.query(sql2);
+const seedSql = fs.readFileSync(seedPath, 'utf8');
+await client.query(seedSql);
 console.log('  ✓ seed OK');
+
 await client.end();
 console.log('✅ Listo. Tu base está lista para usar.');

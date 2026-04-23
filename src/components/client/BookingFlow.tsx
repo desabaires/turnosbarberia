@@ -1,8 +1,11 @@
 'use client';
-import { useEffect, useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Icon } from '@/components/shared/Icon';
 import { Avatar } from '@/components/shared/Avatar';
+import { Toast } from '@/components/shared/Toast';
+import { SlotsSkeleton } from '@/components/shared/Skeleton';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { money } from '@/lib/format';
 import { createBooking } from '@/app/actions/booking';
 import type { Service, Barber } from '@/types/db';
@@ -17,7 +20,9 @@ export function BookingFlow({
   profile: { name: string; email: string | null; phone: string | null } | null;
 }) {
   const [step, setStep] = useState<1|2|3>(preselectedService ? 2 : 1);
+  const [prevStep, setPrevStep] = useState<1|2|3>(step);
   const [serviceId, setServiceId] = useState<string | null>(preselectedService || null);
+  const [confirmingSvc, setConfirmingSvc] = useState<string | null>(null);
   const [barberId,  setBarberId]  = useState<string>(preselectedBarber || 'any');
   const [dateISO,   setDateISO]   = useState<string | null>(null);
   const [slotISO,   setSlotISO]   = useState<string | null>(null);
@@ -34,6 +39,16 @@ export function BookingFlow({
   const service = useMemo(() => services.find(s => s.id === serviceId) || null, [services, serviceId]);
   const days = useMemo(() => buildNextDays(14), []);
 
+  const goStep = (next: 1|2|3) => { setPrevStep(step); setStep(next); };
+
+  // Scroll selected date chip into view
+  const dayPickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!dateISO || !dayPickerRef.current) return;
+    const el = dayPickerRef.current.querySelector<HTMLElement>(`[data-day="${dateISO}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, [dateISO]);
+
   useEffect(() => {
     if (!serviceId || !dateISO) { setSlots([]); return; }
     setLoadingSlots(true);
@@ -44,45 +59,66 @@ export function BookingFlow({
   }, [barberId, serviceId, dateISO]);
 
   const total = service ? Number(service.price) : 0;
+  const stepAnimClass = step > prevStep ? 'step-enter' : step < prevStep ? 'step-enter-back' : '';
 
   return (
     <main className="min-h-screen flex flex-col">
       <header className="px-5 pt-3 pb-3 flex items-center gap-3.5">
-        <Link href="/" className="w-9 h-9 rounded-l bg-card border border-line grid place-items-center" aria-label="Volver">
-          <Icon name="arrow-left" size={18}/>
-        </Link>
+        {step === 1 ? (
+          <Link href="/" className="w-11 h-11 -ml-1 rounded-l bg-card border border-line grid place-items-center active:scale-95 transition" aria-label="Volver al inicio">
+            <Icon name="arrow-left" size={18}/>
+          </Link>
+        ) : (
+          <button type="button" onClick={() => goStep((step - 1) as 1|2|3)}
+            className="w-11 h-11 -ml-1 rounded-l bg-card border border-line grid place-items-center active:scale-95 transition"
+            aria-label="Volver al paso anterior">
+            <Icon name="arrow-left" size={18}/>
+          </button>
+        )}
         <div className="text-base font-semibold -tracking-[0.2px]">Nueva reserva</div>
         <div className="flex-1"/>
-        <div className="font-mono text-[11px] text-muted">{step}/3</div>
+        <div className="font-mono text-[11px] text-muted" aria-label={`Paso ${step} de 3`}>{step}/3</div>
       </header>
 
       <div className="px-5">
-        <div className="flex gap-1">
+        <div className="flex gap-1" role="progressbar" aria-valuenow={step} aria-valuemin={1} aria-valuemax={3}>
           {[1,2,3].map(i => (
             <div key={i}
-              className={`flex-1 h-[3px] rounded ${i <= step ? 'bg-ink' : 'bg-line'}`}/>
+              className={`flex-1 h-[3px] rounded transition-colors duration-200 ${i <= step ? 'bg-ink' : 'bg-line'}`}/>
           ))}
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto px-5 pt-4 pb-4">
+      <div key={step} className={`flex-1 overflow-auto px-5 pt-4 pb-4 ${stepAnimClass}`}>
         {step === 1 && (
           <>
-            <SectionLabel>SERVICIO</SectionLabel>
+            <SectionLabel>ELEGÍ EL SERVICIO</SectionLabel>
             <div className="flex flex-col gap-2">
               {services.map(s => {
                 const sel = s.id === serviceId;
+                const pulse = confirmingSvc === s.id;
                 return (
                   <button key={s.id} type="button"
-                    onClick={() => { setServiceId(s.id); setStep(2); }}
-                    className={`text-left rounded-xl px-4 py-3 flex items-center justify-between border ${sel ? 'bg-ink text-bg border-transparent' : 'bg-card border-line'}`}>
+                    disabled={!!confirmingSvc}
+                    onClick={() => {
+                      setServiceId(s.id);
+                      setConfirmingSvc(s.id);
+                      // micro-pausa visual antes de avanzar
+                      setTimeout(() => { setConfirmingSvc(null); goStep(2); }, 220);
+                    }}
+                    className={`text-left min-h-[60px] rounded-xl px-4 py-3 flex items-center justify-between border transition active:scale-[0.99]
+                      ${sel || pulse ? 'bg-ink text-bg border-transparent' : 'bg-card border-line hover:border-ink/30'}`}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-[34px] h-[34px] rounded-m grid place-items-center ${sel ? 'bg-dark-card' : 'bg-bg'}`}>
-                        <Icon name="scissors" size={16}/>
+                      <div className={`w-[34px] h-[34px] rounded-m grid place-items-center ${sel || pulse ? 'bg-dark-card' : 'bg-bg'}`}>
+                        {pulse ? (
+                          <Icon name="check" size={16} color="#B6754C"/>
+                        ) : (
+                          <Icon name="scissors" size={16}/>
+                        )}
                       </div>
                       <div>
                         <div className="text-[15px] font-medium">{s.name}</div>
-                        <div className={`text-[11px] mt-0.5 ${sel ? 'text-dark-muted' : 'text-muted'}`}>{s.duration_mins} min</div>
+                        <div className={`text-[11px] mt-0.5 ${sel || pulse ? 'text-dark-muted' : 'text-muted'}`}>{s.duration_mins} min</div>
                       </div>
                     </div>
                     <div className="font-mono text-[14px] font-medium">{money(Number(s.price))}</div>
@@ -101,7 +137,11 @@ export function BookingFlow({
                 <div className="text-[15px] font-medium">{service.name}</div>
                 <div className="text-[11px] text-dark-muted mt-0.5">{service.duration_mins} min · {money(Number(service.price))}</div>
               </div>
-              <button type="button" onClick={() => setStep(1)} className="text-[11px] text-dark-muted underline">Cambiar</button>
+              <button type="button" onClick={() => goStep(1)}
+                className="text-[11px] text-dark-muted underline py-2 px-1 active:opacity-60 transition"
+                aria-label="Cambiar servicio">
+                Cambiar
+              </button>
             </div>
 
             <SectionLabel className="mt-5">BARBERO</SectionLabel>
@@ -110,7 +150,9 @@ export function BookingFlow({
                 const sel = b.id === barberId;
                 return (
                   <button key={b.id} type="button" onClick={() => setBarberId(b.id)}
-                    className={`flex-1 px-2 py-3 rounded-xl text-center ${sel ? 'bg-ink text-bg border-0' : 'bg-card border border-line'}`}>
+                    className={`flex-1 min-h-[88px] px-2 py-3 rounded-xl text-center transition active:scale-[0.97]
+                      ${sel ? 'bg-ink text-bg border-0' : 'bg-card border border-line hover:border-ink/30'}`}
+                    aria-pressed={sel}>
                     {b.id === 'any' ? (
                       <div className={`w-9 h-9 mx-auto rounded-full grid place-items-center text-lg ${sel ? 'border border-dashed border-dark-muted' : 'border border-dashed border-muted'}`}>*</div>
                     ) : (
@@ -123,17 +165,20 @@ export function BookingFlow({
             </div>
 
             <SectionLabel className="mt-5">FECHA</SectionLabel>
-            <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1">
+            <div ref={dayPickerRef} className="flex gap-2 overflow-x-auto no-scrollbar -mx-5 px-5 pb-1">
               {days.map(d => {
                 const sel = d.iso === dateISO;
                 return (
                   <button key={d.iso} type="button"
+                    data-day={d.iso}
                     onClick={() => { if (!d.closed) { setDateISO(d.iso); setSlotISO(null); } }}
                     disabled={d.closed}
-                    className={`min-w-[54px] py-2.5 rounded-l text-center
+                    aria-pressed={sel}
+                    aria-label={`${d.wd} ${d.day}${d.closed ? ' (cerrado)' : ''}`}
+                    className={`min-w-[56px] min-h-[64px] py-2.5 rounded-l text-center transition active:scale-[0.96]
                       ${sel ? 'bg-accent text-white border-0' :
-                        d.closed ? 'border border-dashed border-line text-muted opacity-50' :
-                        'bg-card border border-line text-ink'}`}>
+                        d.closed ? 'border border-dashed border-line text-muted opacity-50 cursor-not-allowed' :
+                        'bg-card border border-line text-ink hover:border-ink/30'}`}>
                     <div className="text-[10px] uppercase tracking-wide">{d.wd}</div>
                     <div className="font-display text-[22px] leading-none mt-1">{d.day}</div>
                     <div className="text-[9px] mt-1 opacity-80">{d.closed ? 'Cerrado' : d.label}</div>
@@ -144,17 +189,32 @@ export function BookingFlow({
 
             <div className="flex justify-between items-baseline mt-5 mb-2.5">
               <SectionLabel className="!m-0">HORARIO</SectionLabel>
-              <div className="text-[11px] text-muted">
-                {dateISO ? `${slots.filter(s => !s.taken).length} disponibles` : 'Elegí una fecha'}
+              <div className="text-[11px] text-muted font-mono">
+                {dateISO && !loadingSlots
+                  ? `${slots.filter(s => !s.taken).length} libres`
+                  : dateISO ? '...' : 'Elegí una fecha'}
               </div>
             </div>
 
             {!dateISO ? (
-              <div className="text-[12px] text-muted py-6 text-center">Elegí una fecha para ver horarios</div>
+              <div className="text-[12px] text-muted py-6 text-center">Elegí una fecha para ver los horarios</div>
             ) : loadingSlots ? (
-              <div className="text-[12px] text-muted py-6 text-center">Cargando horarios…</div>
+              <>
+                <div className="sr-only">Buscando horarios disponibles…</div>
+                <SlotsSkeleton count={12} />
+              </>
             ) : slots.length === 0 ? (
-              <div className="text-[12px] text-muted py-6 text-center">Sin horarios para esta fecha</div>
+              <EmptyState
+                icon="clock"
+                title="Este día no tiene horarios libres"
+                description="Probá con otro día o cambiá de barbero."
+              />
+            ) : slots.filter(s => !s.taken).length === 0 ? (
+              <EmptyState
+                icon="clock"
+                title="Todos los turnos están tomados"
+                description="Probá con otro día o elegí otro barbero."
+              />
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {slots.map(s => {
@@ -162,10 +222,12 @@ export function BookingFlow({
                   return (
                     <button key={s.iso} type="button" disabled={s.taken}
                       onClick={() => setSlotISO(s.iso)}
-                      className={`py-3 rounded-m text-center font-mono text-[13px] font-medium
+                      aria-pressed={sel}
+                      aria-label={s.taken ? `${s.time} no disponible` : `Elegir ${s.time}`}
+                      className={`min-h-[44px] py-3 rounded-m text-center font-mono text-[13px] font-medium transition active:scale-[0.95]
                         ${sel ? 'bg-ink text-bg border-0' :
-                          s.taken ? 'border border-dashed border-line text-muted line-through' :
-                          'bg-card border border-line text-ink'}`}>
+                          s.taken ? 'border border-dashed border-line text-muted line-through cursor-not-allowed' :
+                          'bg-card border border-line text-ink hover:border-ink/30'}`}>
                       {s.time}
                     </button>
                   );
@@ -182,29 +244,57 @@ export function BookingFlow({
               <Row label="Servicio" value={service.name}/>
               <Row label="Duración" value={`${service.duration_mins} min`}/>
               <Row label="Barbero" value={
-                barberId === 'any' ? 'Asignamos al disponible' : barbers.find(b => b.id === barberId)?.name || ''
+                barberId === 'any' ? 'Te asignamos el disponible' : barbers.find(b => b.id === barberId)?.name || ''
               }/>
               <Row label="Cuándo" value={slotISO ? new Date(slotISO).toLocaleString('es-AR', {
                 weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', hour12:false
               }).replace('.', '') : ''}/>
             </div>
 
-            <SectionLabel className="mt-5">DATOS DE CONTACTO</SectionLabel>
+            <SectionLabel className="mt-5">TUS DATOS</SectionLabel>
             <div className="flex flex-col gap-2">
-              <input value={name} onChange={e => setName(e.target.value)}
-                placeholder="Nombre completo"
-                className="bg-card border border-line rounded-xl px-4 py-3 outline-none"/>
-              <input value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="Email" type="email"
-                className="bg-card border border-line rounded-xl px-4 py-3 outline-none font-mono"/>
-              <input value={phone} onChange={e => setPhone(e.target.value)}
-                placeholder="Teléfono +54..." type="tel"
-                className="bg-card border border-line rounded-xl px-4 py-3 outline-none font-mono"/>
+              <label className="bg-card border border-line rounded-xl px-4 py-2.5 block focus-within:border-ink/50 transition">
+                <span className="block text-[10px] text-muted uppercase tracking-[1.5px] mb-0.5">Nombre</span>
+                <input
+                  value={name}
+                  onChange={e => setName(e.target.value)}
+                  placeholder="Joaquín Méndez"
+                  autoComplete="name"
+                  enterKeyHint="next"
+                  className="bg-transparent text-ink w-full outline-none"
+                />
+              </label>
+              <label className="bg-card border border-line rounded-xl px-4 py-2.5 block focus-within:border-ink/50 transition">
+                <span className="block text-[10px] text-muted uppercase tracking-[1.5px] mb-0.5">Email</span>
+                <input
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="vos@email.com"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  enterKeyHint="next"
+                  className="bg-transparent text-ink w-full outline-none font-mono"
+                />
+              </label>
+              <label className="bg-card border border-line rounded-xl px-4 py-2.5 block focus-within:border-ink/50 transition">
+                <span className="block text-[10px] text-muted uppercase tracking-[1.5px] mb-0.5">Teléfono</span>
+                <input
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="+54 9 11 5823 4412"
+                  type="tel"
+                  autoComplete="tel"
+                  inputMode="tel"
+                  enterKeyHint="done"
+                  className="bg-transparent text-ink w-full outline-none font-mono"
+                />
+              </label>
             </div>
 
             {error && (
-              <div className="mt-3 text-[13px] rounded-lg px-3 py-2" style={{ background: 'rgba(182,117,76,.18)', color:'#B6754C' }}>
-                {error}
+              <div className="mt-3">
+                <Toast tone="error" message={error} onClose={() => setError(null)} />
               </div>
             )}
           </>
@@ -216,12 +306,15 @@ export function BookingFlow({
           <div className="text-[11px] text-muted">Total</div>
           <div className="font-display text-[24px] leading-none">{money(total)}</div>
         </div>
+        {step === 1 && (
+          <div className="text-[12px] text-muted">Tocá para continuar</div>
+        )}
         {step === 2 && (
           <button type="button"
             disabled={!serviceId || !dateISO || !slotISO}
-            onClick={() => setStep(3)}
-            className="bg-accent text-white px-6 py-3.5 rounded-xl text-[14px] font-semibold flex items-center gap-2 disabled:opacity-50">
-            Siguiente <Icon name="arrow-right" size={16}/>
+            onClick={() => goStep(3)}
+            className="bg-accent text-white px-6 py-3.5 rounded-xl text-[14px] font-semibold flex items-center gap-2 disabled:opacity-40 active:scale-[0.97] transition">
+            Seguir <Icon name="arrow-right" size={16} color="#fff"/>
           </button>
         )}
         {step === 3 && (
@@ -239,12 +332,9 @@ export function BookingFlow({
               });
               if (res?.error) setError(res.error);
             })}
-            className="bg-accent text-white px-6 py-3.5 rounded-xl text-[14px] font-semibold flex items-center gap-2 disabled:opacity-60">
-            {pending ? 'Confirmando…' : (<>Confirmar turno <Icon name="arrow-right" size={16}/></>)}
+            className="bg-accent text-white px-6 py-3.5 rounded-xl text-[14px] font-semibold flex items-center gap-2 disabled:opacity-50 active:scale-[0.97] transition">
+            {pending ? 'Confirmando…' : (<>Confirmar turno <Icon name="arrow-right" size={16} color="#fff"/></>)}
           </button>
-        )}
-        {step === 1 && (
-          <div className="text-[12px] text-muted">Elegí un servicio</div>
         )}
       </footer>
     </main>

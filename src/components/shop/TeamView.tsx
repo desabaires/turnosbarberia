@@ -1,5 +1,6 @@
 import { Avatar } from '@/components/shared/Avatar';
 import { Icon } from '@/components/shared/Icon';
+import { EmptyState } from '@/components/shared/EmptyState';
 import type { Barber, Schedule } from '@/types/db';
 
 const DAY_LABELS = ['L','M','M','J','V','S','D']; // Mon..Sun
@@ -18,6 +19,19 @@ export function TeamView({
   const start = new Date(startOfWeek);
   const todayDate = new Date(todayISO);
   const tomorrowDate = new Date(tomorrowISO);
+
+  if (barbers.length === 0) {
+    return (
+      <div className="flex-1 overflow-auto px-5 pt-4 pb-5">
+        <EmptyState
+          dark
+          icon="users"
+          title="Todavía no hay equipo"
+          description="Sumá barberos desde Ajustes para que aparezcan acá con sus horarios y métricas."
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 overflow-auto px-5 pt-4 pb-5">
@@ -46,7 +60,7 @@ export function TeamView({
         const wd = schedules.filter(s => s.barber_id === b.id && s.is_working);
         const hoursStr = wd.length
           ? `${dayRangeLabel(working)} · ${wd[0].start_time.replace(':00','')}-${wd[0].end_time.replace(':00','')}`
-          : 'Sin horario';
+          : 'Sin horario cargado';
 
         const occupancy = Math.min(100, Math.round((weekCount * 100) / (SLOTS_PER_DAY * working.size || 1)));
 
@@ -54,11 +68,11 @@ export function TeamView({
           <div key={b.id} className="bg-dark-card border border-dark-line rounded-2xl px-4 py-3.5 mb-2.5">
             <div className="flex items-center gap-3">
               <Avatar name={b.initials} size={46} hue={b.hue} dark/>
-              <div className="flex-1">
-                <div className="text-[15px] font-semibold text-bg">{b.name}</div>
-                <div className="text-[11px] text-dark-muted mt-0.5">{b.role}</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[15px] font-semibold text-bg truncate">{b.name}</div>
+                <div className="text-[11px] text-dark-muted mt-0.5 truncate">{b.role}</div>
               </div>
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-dark" style={{ color: '#B6754C' }}>
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-dark text-accent">
                 <Icon name="star" size={12} color="#B6754C"/>
                 <span className="text-[11px] font-semibold">{Number(b.rating).toFixed(1)}</span>
               </div>
@@ -75,9 +89,8 @@ export function TeamView({
               {hoursStr}
             </div>
 
-            <div className="flex gap-1 mt-3">
+            <div className="flex gap-1 mt-3" aria-label={`Ocupación semanal de ${b.name}`}>
               {DAY_LABELS.map((d, di) => {
-                // di: 0=Lun..6=Dom; map to dow (0=Sun..6=Sat) → di=0 → dow=1, di=6 → dow=0
                 const dow = (di + 1) % 7;
                 const off = !working.has(dow);
                 const max = Math.max(...perDay, 1);

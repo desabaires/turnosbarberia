@@ -16,7 +16,7 @@ const BookingSchema = z.object({
 export async function createBooking(input: z.infer<typeof BookingSchema>) {
   const parsed = BookingSchema.safeParse(input);
   if (!parsed.success) {
-    return { error: 'Datos inválidos: ' + parsed.error.issues.map(i => i.message).join(', ') };
+    return { error: 'Revisá los datos: ' + parsed.error.issues.map(i => i.message).join(', ') };
   }
   const data = parsed.data;
 
@@ -25,7 +25,7 @@ export async function createBooking(input: z.infer<typeof BookingSchema>) {
   const { data: service, error: svcErr } = await admin
     .from('services').select('id, duration_mins, is_active').eq('id', data.serviceId).single();
   if (svcErr || !service || !service.is_active) {
-    return { error: 'Servicio no encontrado' };
+    return { error: 'Ese servicio ya no está disponible.' };
   }
 
   let barberId = data.barberId;
@@ -46,7 +46,7 @@ export async function createBooking(input: z.infer<typeof BookingSchema>) {
         .limit(1);
       if (!conflicts || conflicts.length === 0) { barberId = b.id; break; }
     }
-    if (barberId === 'any') return { error: 'No hay barberos disponibles en ese horario' };
+    if (barberId === 'any') return { error: 'No hay barberos libres en ese horario. Probá con otro.' };
   }
 
   const startsAt = new Date(data.startsAt);

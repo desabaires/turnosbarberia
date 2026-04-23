@@ -25,17 +25,25 @@ html, body {
   font-family: 'Helvetica Neue', Helvetica, Arial, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
 }
 
 * { box-sizing: border-box; }
 button { font-family: inherit; cursor: pointer; }
-input, textarea { font-family: inherit; }
+input, textarea, select { font-family: inherit; }
+
+/* Accessible focus ring that respects our palette */
+:where(button, a, input, textarea, select):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
 
 /* Hide horizontal scrollbars in pickers but keep scrollable */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* barber-pole stripe */
+/* barber-pole stripe — animated slow slide */
 .stripe {
   height: 4px;
   background: repeating-linear-gradient(
@@ -45,4 +53,72 @@ input, textarea { font-family: inherit; }
     var(--accent) 22px 36px,
     var(--bg) 36px 44px
   );
+  background-size: 44px 100%;
+  animation: stripe-slide 6s linear infinite;
 }
+
+@keyframes stripe-slide {
+  from { background-position: 0 0; }
+  to   { background-position: 44px 0; }
+}
+
+/* Slide transitions between booking steps */
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes slide-in-left {
+  from { opacity: 0; transform: translateX(-20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.step-enter      { animation: slide-in-right 280ms ease-out both; }
+.step-enter-back { animation: slide-in-left  280ms ease-out both; }
+
+/* Fade-in used for confirmation ticket */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in-up { animation: fade-in-up 380ms ease-out both; }
+
+/* Bouncy check in confirmation */
+@keyframes pop-in {
+  0%   { transform: scale(0);   opacity: 0; }
+  55%  { transform: scale(1.14); opacity: 1; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+.pop-in { animation: pop-in 420ms cubic-bezier(.34,1.56,.64,1) both; }
+
+/* Skeleton shimmer */
+@keyframes shimmer {
+  0%   { background-position: -240px 0; }
+  100% { background-position: 240px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg,
+    rgba(14,14,14,0.04) 0%,
+    rgba(14,14,14,0.10) 50%,
+    rgba(14,14,14,0.04) 100%);
+  background-size: 480px 100%;
+  animation: shimmer 1.2s linear infinite;
+  border-radius: 10px;
+}
+.skeleton-dark {
+  background: linear-gradient(90deg,
+    rgba(245,243,238,0.04) 0%,
+    rgba(245,243,238,0.10) 50%,
+    rgba(245,243,238,0.04) 100%);
+  background-size: 480px 100%;
+  animation: shimmer 1.2s linear infinite;
+  border-radius: 10px;
+}
+
+/* Toast slide-in */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.toast-in { animation: toast-in 220ms ease-out both; }
+
+/* Prevent iOS from auto-zooming on input focus (needs 16px font size) */
+input, textarea, select { font-size: 16px; }

@@ -13,7 +13,7 @@ const tabs = [
 export function TabBar() {
   const pathname = usePathname();
   return (
-    <nav className="border-t border-line bg-card flex justify-around px-4 pt-2 pb-6">
+    <nav aria-label="Navegación principal" className="border-t border-line bg-card flex justify-around px-4 pt-2 pb-6">
       {tabs.map(t => {
         const isActive =
           t.href === '/' ? pathname === '/' :
@@ -22,7 +22,7 @@ export function TabBar() {
         if (isCta) {
           return (
             <Link key={t.id} href={t.href}
-              className="-mt-2 grid h-[46px] w-[46px] place-items-center rounded-full bg-ink text-white shadow-fab"
+              className="-mt-2 grid h-12 w-12 place-items-center rounded-full bg-ink text-white shadow-fab active:scale-95 transition"
               aria-label={t.label}>
               <Icon name={t.icon} size={22} color="#fff"/>
             </Link>
@@ -30,7 +30,9 @@ export function TabBar() {
         }
         return (
           <Link key={t.id} href={t.href}
-            className={`flex flex-col items-center gap-1 px-1.5 py-1 ${isActive ? 'text-ink' : 'text-muted'}`}>
+            aria-current={isActive ? 'page' : undefined}
+            aria-label={t.label}
+            className={`flex flex-col items-center justify-center gap-1 min-w-[64px] min-h-[48px] px-1 py-1 transition ${isActive ? 'text-ink' : 'text-muted'}`}>
             <Icon name={t.icon} size={20}/>
             <span className={`text-[10px] ${isActive ? 'font-semibold' : ''}`}>{t.label}</span>
           </Link>

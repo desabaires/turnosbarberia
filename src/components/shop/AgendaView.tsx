@@ -1,8 +1,10 @@
 'use client';
 import Link from 'next/link';
-import { useMemo, useState, useTransition } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { Icon } from '@/components/shared/Icon';
 import { Avatar } from '@/components/shared/Avatar';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { Toast } from '@/components/shared/Toast';
 import { money } from '@/lib/format';
 import { setAppointmentStatus } from '@/app/actions/booking';
 
@@ -14,6 +16,7 @@ type A = {
 
 export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[]; barbers: any[]; dayISO: string }) {
   const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
   const days = useMemo(() => buildDays(7), []);
   const total = appointments.length;
   const done = appointments.filter(a => a.status === 'completed').length;
@@ -21,6 +24,26 @@ export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[
     .filter(a => a.status !== 'cancelled' && a.status !== 'no_show')
     .reduce((s, a) => s + Number(a.services?.price || 0), 0);
   const now = Date.now();
+
+  const isToday = dayISO === todayLocalISO();
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!isToday) return;
+    const id = setInterval(() => setTick(t => t + 1), 60_000);
+    return () => clearInterval(id);
+  }, [isToday]);
+  void tick;
+
+  // scroll-into-view del día activo
+  const dayPickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = dayPickerRef.current?.querySelector<HTMLElement>(`[data-day="${dayISO}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, [dayISO]);
+
+  // Compute "now" insertion index relative to appointments
+  const nowTimeLabel = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  let nowInserted = false;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -32,15 +55,18 @@ export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[
       </div>
 
       {/* Day picker */}
-      <div className="px-5 pt-3.5 pb-2.5 flex gap-1.5 overflow-x-auto no-scrollbar">
+      <div ref={dayPickerRef} className="px-5 pt-3.5 pb-2.5 flex gap-1.5 overflow-x-auto no-scrollbar -mx-0">
         {days.map(d => {
           const sel = d.iso === dayISO;
           return (
             <Link key={d.iso} href={`/shop?d=${d.iso}`}
-              className={`min-w-[48px] py-2 rounded-m text-center
+              data-day={d.iso}
+              aria-pressed={sel}
+              aria-label={`Ver agenda del ${d.wd} ${d.day}${d.closed ? ' (cerrado)' : ''}`}
+              className={`min-w-[52px] min-h-[48px] py-2 rounded-m text-center transition active:scale-[0.97]
                 ${sel ? 'bg-bg text-ink border-0' :
-                  d.closed ? 'border border-dashed border-dark-line text-dark-muted opacity-50' :
-                  'border border-dark-line text-bg'}`}>
+                  d.closed ? 'border border-dashed border-dark-line text-dark-muted opacity-60' :
+                  'border border-dark-line text-bg hover:border-bg/40'}`}>
               <div className="text-[9px] uppercase tracking-wide">{d.wd}</div>
               <div className="font-display text-[18px] leading-none mt-0.5">{d.day}</div>
             </Link>
@@ -54,61 +80,106 @@ export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[
           <div className="font-mono text-[10px] tracking-[2px] text-dark-muted flex-1">
             {new Date(dayISO + 'T00:00:00').toLocaleDateString('es-AR', { weekday:'long', day:'numeric' }).toUpperCase()} · TODOS LOS BARBEROS
           </div>
-          <Link href="/shop/nuevo" className="w-7 h-7 rounded-s grid place-items-center text-white" style={{ background: '#B6754C' }}>
+          <Link href="/shop/nuevo" aria-label="Nuevo turno" className="w-9 h-9 rounded-s grid place-items-center text-white bg-accent active:scale-95 transition">
             <Icon name="plus" size={16} color="#fff"/>
           </Link>
         </div>
 
-        {appointments.length === 0 && (
-          <div className="text-center text-dark-muted text-sm py-10">Sin turnos para esta fecha</div>
+        {error && (
+          <div className="mb-3">
+            <Toast dark tone="error" message={error} onClose={() => setError(null)} />
+          </div>
         )}
 
-        {appointments.map(a => {
-          const startMs = new Date(a.starts_at).getTime();
-          const endMs = new Date(a.ends_at).getTime();
-          const isInProgress = a.status === 'in_progress' || (now >= startMs && now < endMs && a.status !== 'completed');
-          const isDone = a.status === 'completed';
-          const isNext = !isInProgress && !isDone && startMs > now && startMs - now < 30 * 60_000;
-          const time = new Date(a.starts_at).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false });
-          const hue = a.barbers?.hue || 55;
-          return (
-            <div key={a.id} className={`flex gap-3 mb-2 ${isDone ? 'opacity-50' : ''}`}>
-              <div className="min-w-[46px] pt-3.5">
-                <div className="font-mono text-[13px] text-bg font-medium">{time}</div>
-                <div className="text-[9px] text-dark-muted mt-0.5">{a.services?.duration_mins}m</div>
-              </div>
-              <button type="button"
-                onClick={() => start(async () => {
-                  const next = isDone ? 'confirmed' : isInProgress ? 'completed' : 'in_progress';
-                  await setAppointmentStatus(a.id, next as any);
-                })}
-                disabled={pending}
-                className={`flex-1 rounded-l px-3.5 py-3 flex items-center gap-2.5 text-left
-                  ${isInProgress ? 'text-white border-0' :
-                    isNext ? 'bg-bg text-ink border-0' :
-                    'bg-dark-card text-bg border border-dark-line'}`}
-                style={{
-                  background: isInProgress ? '#B6754C' : undefined,
-                  borderLeft: !isInProgress && !isNext ? `3px solid oklch(0.7 0.08 ${hue})` : undefined
-                }}>
-                <Avatar name={a.barbers?.initials || '??'} size={32} hue={hue} dark={!isInProgress && !isNext}/>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold truncate">{a.customer_name}</div>
-                  <div className="text-[11px] opacity-75 mt-0.5">{a.services?.name} · {a.barbers?.name}</div>
+        {appointments.length === 0 ? (
+          <EmptyState
+            dark
+            icon="calendar"
+            title="Día libre"
+            description={isToday ? 'Todavía no hay turnos cargados para hoy. Tocá + para sumar un walk-in.' : 'Este día no tiene turnos.'}
+            ctaLabel="Sumar turno"
+            ctaHref="/shop/nuevo"
+          />
+        ) : (
+          <>
+            {appointments.map((a) => {
+              const startMs = new Date(a.starts_at).getTime();
+              const endMs = new Date(a.ends_at).getTime();
+              const isInProgress = a.status === 'in_progress' || (now >= startMs && now < endMs && a.status !== 'completed');
+              const isDone = a.status === 'completed';
+              const isNext = !isInProgress && !isDone && startMs > now && startMs - now < 30 * 60_000;
+              const time = new Date(a.starts_at).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false });
+              const hue = a.barbers?.hue || 55;
+
+              // Insertar la línea AHORA antes del primer turno cuya hora sea >= ahora (solo hoy)
+              const showNowBefore = isToday && !nowInserted && startMs >= now;
+              if (showNowBefore) nowInserted = true;
+
+              return (
+                <Fragment key={a.id}>
+                  {showNowBefore && (
+                    <div className="flex items-center gap-2.5 my-2" aria-hidden="true">
+                      <div className="font-mono text-[10px] text-accent tracking-[2px] font-semibold">
+                        AHORA · {nowTimeLabel}
+                      </div>
+                      <div className="flex-1 h-px bg-accent/60" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-accent" />
+                    </div>
+                  )}
+
+                  <div className={`flex gap-3 mb-2 ${isDone ? 'opacity-50' : ''}`}>
+                    <div className="min-w-[46px] pt-3.5">
+                      <div className="font-mono text-[13px] text-bg font-medium">{time}</div>
+                      <div className="text-[9px] text-dark-muted mt-0.5">{a.services?.duration_mins}m</div>
+                    </div>
+                    <button type="button"
+                      onClick={() => start(async () => {
+                        setError(null);
+                        const next = isDone ? 'confirmed' : isInProgress ? 'completed' : 'in_progress';
+                        const r = await setAppointmentStatus(a.id, next as any);
+                        if ((r as any)?.error) setError((r as any).error);
+                      })}
+                      disabled={pending}
+                      aria-label={`Turno ${a.customer_name} a las ${time}. Tocá para cambiar estado.`}
+                      className={`flex-1 min-h-[56px] rounded-l px-3.5 py-3 flex items-center gap-2.5 text-left transition active:scale-[0.99]
+                        ${isInProgress ? 'text-white border-0 bg-accent' :
+                          isNext ? 'bg-bg text-ink border-0' :
+                          'bg-dark-card text-bg border border-dark-line hover:border-bg/30'}`}
+                      style={{
+                        borderLeft: !isInProgress && !isNext ? `3px solid oklch(0.7 0.08 ${hue})` : undefined
+                      }}>
+                      <Avatar name={a.barbers?.initials || '??'} size={32} hue={hue} dark={!isInProgress && !isNext}/>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[13px] font-semibold truncate">{a.customer_name}</div>
+                        <div className="text-[11px] opacity-80 mt-0.5 truncate">{a.services?.name} · {a.barbers?.name}</div>
+                      </div>
+                      {isDone && <Icon name="check" size={16}/>}
+                      {isInProgress && (
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-xs tracking-wider" style={{ background:'rgba(255,255,255,0.25)' }}>
+                          EN CURSO
+                        </span>
+                      )}
+                      {!isDone && !isInProgress && (
+                        <Icon name="chevron-right" size={16} color={isNext ? '#0E0E0E' : '#F5F3EE'}/>
+                      )}
+                    </button>
+                  </div>
+                </Fragment>
+              );
+            })}
+
+            {/* Si todos los turnos ya pasaron, mostrar el indicador "AHORA" al final */}
+            {isToday && !nowInserted && (
+              <div className="flex items-center gap-2.5 my-2" aria-hidden="true">
+                <div className="font-mono text-[10px] text-accent tracking-[2px] font-semibold">
+                  AHORA · {nowTimeLabel}
                 </div>
-                {isDone && <Icon name="check" size={16}/>}
-                {isInProgress && (
-                  <span className="text-[10px] font-bold px-2 py-1 rounded-xs tracking-wider" style={{ background:'rgba(255,255,255,0.25)' }}>
-                    EN CURSO
-                  </span>
-                )}
-                {!isDone && !isInProgress && (
-                  <Icon name="chevron-right" size={16} color={isNext ? '#0E0E0E' : '#8C8A83'}/>
-                )}
-              </button>
-            </div>
-          );
-        })}
+                <div className="flex-1 h-px bg-accent/60" />
+                <div className="w-1.5 h-1.5 rounded-full bg-accent" />
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -127,6 +198,11 @@ function Stat({ k, v, s }: { k: string; v: string; s: string }) {
 function shortMoney(n: number) {
   if (n >= 1000) return `$${Math.round(n/1000)}k`;
   return money(n);
+}
+
+function todayLocalISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 function buildDays(n: number) {

@@ -1,5 +1,6 @@
 import { Icon } from '@/components/shared/Icon';
 import { Stripe } from '@/components/shared/Stripe';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { money } from '@/lib/format';
 import type { Sale, Product } from '@/types/db';
 
@@ -11,7 +12,7 @@ export function CashView({ sales, products }: { sales: Sale[]; products: Product
   return (
     <div className="flex-1 overflow-auto px-5 pt-4 pb-5">
       {/* Big total */}
-      <div className="bg-bg text-ink rounded-2xl px-5 py-4.5 relative overflow-hidden">
+      <div className="bg-bg text-ink rounded-2xl px-5 py-4 relative overflow-hidden">
         <Stripe className="absolute top-0 left-0 right-0"/>
         <div className="font-mono text-[10px] tracking-[2px] text-muted mt-2">TOTAL DÍA</div>
         <div className="font-display text-[48px] leading-none mt-1.5 -tracking-[1px]">{money(total)}</div>
@@ -22,20 +23,28 @@ export function CashView({ sales, products }: { sales: Sale[]; products: Product
       </div>
 
       <div className="flex gap-2 mt-3.5">
-        <button className="flex-1 bg-dark-card text-bg border border-dark-line px-3 py-3 rounded-l text-[13px] font-medium flex items-center justify-center gap-1.5">
+        <button
+          type="button"
+          className="flex-1 min-h-[48px] bg-dark-card text-bg border border-dark-line px-3 py-3 rounded-l text-[13px] font-medium flex items-center justify-center gap-1.5 active:scale-[0.98] transition"
+        >
           <Icon name="bag" size={16}/> Vender producto
         </button>
-        <button className="flex-1 text-white px-3 py-3 rounded-l text-[13px] font-semibold flex items-center justify-center gap-1.5"
-                style={{ background: '#B6754C' }}>
+        <button
+          type="button"
+          className="flex-1 min-h-[48px] text-white px-3 py-3 rounded-l text-[13px] font-semibold flex items-center justify-center gap-1.5 bg-accent active:scale-[0.98] transition"
+        >
           <Icon name="plus" size={16} color="#fff"/> Cobrar servicio
         </button>
       </div>
 
       <SectionLabel className="mt-6">MOVIMIENTOS · {sales.length}</SectionLabel>
       {sales.length === 0 ? (
-        <div className="bg-dark-card border border-dark-line rounded-xl text-center text-dark-muted text-sm py-10">
-          Sin movimientos hoy todavía
-        </div>
+        <EmptyState
+          dark
+          icon="cash"
+          title="Caja vacía por ahora"
+          description="Cuando cobres un servicio o vendas un producto, va a aparecer acá."
+        />
       ) : (
         <div className="bg-dark-card border border-dark-line rounded-xl overflow-hidden">
           {sales.map((s, i) => (
@@ -44,10 +53,10 @@ export function CashView({ sales, products }: { sales: Sale[]; products: Product
                 <Icon name={s.type === 'product' ? 'bag' : 'scissors'} size={14}/>
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-medium text-bg">
+                <div className="text-[13px] font-medium text-bg truncate">
                   {s.type === 'product' ? products.find(p => p.id === s.product_id)?.name || 'Producto' : 'Servicio'}
                 </div>
-                <div className="text-[11px] text-dark-muted mt-0.5">
+                <div className="text-[11px] text-dark-muted mt-0.5 truncate">
                   {new Date(s.created_at).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false })}
                   {s.customer_name ? ` · ${s.customer_name}` : ''} · {labelMethod(s.payment_method)}
                 </div>
@@ -59,25 +68,36 @@ export function CashView({ sales, products }: { sales: Sale[]; products: Product
       )}
 
       <SectionLabel className="mt-6">STOCK · PRODUCTOS</SectionLabel>
-      <div className="grid grid-cols-2 gap-2">
-        {products.map(p => (
-          <div key={p.id} className="bg-dark-card border border-dark-line rounded-l px-3.5 py-3">
-            <div className="text-[13px] font-medium text-bg">{p.name}</div>
-            <div className="font-mono text-[13px] font-semibold mt-1" style={{ color: '#B6754C' }}>{money(Number(p.price))}</div>
-            <div className={`text-[10px] mt-1 ${p.stock < 10 ? '' : 'text-dark-muted'}`}
-                 style={p.stock < 10 ? { color: '#B6754C' } : undefined}>
-              {p.stock < 10 ? '⚠ ' : ''}Stock: {p.stock}
-            </div>
-          </div>
-        ))}
-      </div>
+      {products.length === 0 ? (
+        <EmptyState
+          dark
+          icon="bag"
+          title="Sin productos cargados"
+          description="Agregá productos desde Ajustes para empezar a venderlos desde la caja."
+        />
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {products.map(p => {
+            const low = p.stock < 10;
+            return (
+              <div key={p.id} className="bg-dark-card border border-dark-line rounded-l px-3.5 py-3">
+                <div className="text-[13px] font-medium text-bg truncate">{p.name}</div>
+                <div className="font-mono text-[13px] font-semibold mt-1 text-accent">{money(Number(p.price))}</div>
+                <div className={`text-[10px] mt-1 ${low ? 'text-accent' : 'text-dark-muted'}`}>
+                  {low ? '⚠ ' : ''}Stock: {p.stock}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
 function Tile({ l, v }: { l: string; v: string }) {
   return (
-    <div className="flex-1 bg-bg border border-line/60 px-3 py-2.5 rounded-m">
+    <div className="flex-1 bg-bg border border-line px-3 py-2.5 rounded-m">
       <div className="text-[10px] text-muted uppercase">{l}</div>
       <div className="font-mono text-[15px] font-semibold mt-0.5">{v}</div>
     </div>

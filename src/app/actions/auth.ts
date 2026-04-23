@@ -27,6 +27,31 @@ export async function sendMagicLink(formData: FormData) {
   return { ok: true };
 }
 
+export async function signupOwner(formData: FormData) {
+  const email = String(formData.get('email') || '').trim();
+  const name  = String(formData.get('name')  || '').trim();
+  const phone = String(formData.get('phone') || '').trim();
+
+  if (name.length < 2) {
+    return { error: 'Ingresá tu nombre completo' };
+  }
+  if (!email || !email.includes('@')) {
+    return { error: 'Ingresá un email válido' };
+  }
+
+  const supabase = createClient();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  const { error } = await supabase.auth.signInWithOtp({
+    email,
+    options: {
+      emailRedirectTo: `${siteUrl}/auth/callback?next=/onboarding`,
+      data: { name, phone }
+    }
+  });
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
 export async function signOut() {
   const supabase = createClient();
   await supabase.auth.signOut();

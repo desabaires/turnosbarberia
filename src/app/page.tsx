@@ -12,10 +12,11 @@ export default async function RootPage() {
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
-      .select('is_admin')
+      .select('is_admin, shop_id')
       .eq('id', user.id)
-      .maybeSingle<{ is_admin: boolean }>();
+      .maybeSingle<{ is_admin: boolean; shop_id: string | null }>();
     if (profile?.is_admin) redirect('/shop');
+    if (profile && profile.shop_id === null) redirect('/onboarding');
   }
 
   const lastShop = cookies().get(LAST_SHOP_COOKIE)?.value;

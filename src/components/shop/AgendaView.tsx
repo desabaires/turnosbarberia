@@ -1,17 +1,27 @@
 'use client';
 import Link from 'next/link';
-import { Fragment, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Icon } from '@/components/shared/Icon';
-import { Avatar } from '@/components/shared/Avatar';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Toast } from '@/components/shared/Toast';
 import { money } from '@/lib/format';
 import { setAppointmentStatus } from '@/app/actions/booking';
+import { ShopSwitcher, type ShopBrief } from '@/components/shop/ShopSwitcher';
 
 type A = {
   id: string; starts_at: string; ends_at: string; customer_name: string; status: string;
   services: { name: string; duration_mins: number; price: number };
   barbers: { id: string; name: string; initials: string; hue: number };
+};
+
+type ViewMode = 'day' | 'week';
+
+type ScheduleRow = {
+  day_of_week: number;
+  start_time: string | null;
+  end_time: string | null;
+  is_working: boolean;
 };
 
 type StatusOption = 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
@@ -24,40 +34,79 @@ const STATUS_LABELS: Record<StatusOption, string> = {
   no_show: 'No se presentó'
 };
 
-export function AgendaView({ appointments, barbers, dayISO, workingDays }: { appointments: A[]; barbers: any[]; dayISO: string; workingDays?: number[] }) {
+const SLOT_MIN = 30;          // tamaño de cada fila (30 min)
+const SLOT_HEIGHT = 48;       // altura en px por bloque de 30 min
+const DEFAULT_START_H = 8;    // 08:00
+const DEFAULT_END_H = 21;     // 21:00
+
+export function AgendaView({
+  appointments, barbers, dayISO, workingDays, view = 'day',
+  weekAppointments, weekStartISO, schedules,
+  currentShop, userShops
+}: {
+  appointments: A[];
+  barbers: any[];
+  dayISO: string;
+  workingDays?: number[];
+  view?: ViewMode;
+  /** Turnos de los 7 días de la semana actual (solo si view=week). */
+  weekAppointments?: A[];
+  /** ISO del lunes de la semana que se muestra (solo si view=week). */
+  weekStartISO?: string;
+  /** Schedules del shop (cualquier barbero). Se usan para derivar la ventana horaria del día. */
+  schedules?: ScheduleRow[];
+  currentShop?: ShopBrief;
+  userShops?: ShopBrief[];
+}) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
-  const days = useMemo(() => buildDays(7, workingDays), [workingDays]);
+
   const total = appointments.length;
   const done = appointments.filter(a => a.status === 'completed').length;
   const ingresos = appointments
     .filter(a => a.status !== 'cancelled' && a.status !== 'no_show')
     .reduce((s, a) => s + Number(a.services?.price || 0), 0);
-  const now = Date.now();
 
   const isToday = dayISO === todayLocalISO();
-  const [tick, setTick] = useState(0);
+
+  // Tick para mover la línea "now" cada minuto.
+  const [, setTick] = useState(0);
   useEffect(() => {
     if (!isToday) return;
     const id = setInterval(() => setTick(t => t + 1), 60_000);
     return () => clearInterval(id);
   }, [isToday]);
-  void tick;
 
-  // scroll-into-view del día activo
-  const dayPickerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = dayPickerRef.current?.querySelector<HTMLElement>(`[data-day="${dayISO}"]`);
-    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-  }, [dayISO]);
+  // Ventana horaria: derivada de schedules del día. Fallback: 08-21.
+  const dow = new Date(dayISO + 'T12:00:00').getDay();
+  const { startH, endH } = useMemo(() => deriveWindow(schedules, view === 'week' ? null : dow), [schedules, dow, view]);
+  const slots = useMemo(() => buildSlots(startH, endH), [startH, endH]);
 
-  // Compute "now" insertion index relative to appointments
-  const nowTimeLabel = new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
-  let nowInserted = false;
+  const dayIsClosed = useMemo(() => {
+    if (!workingDays) return false;
+    const s = new Set(workingDays);
+    return !s.has(dow);
+  }, [workingDays, dow]);
+
+  const switchView = (next: ViewMode) => {
+    const qs = new URLSearchParams(searchParams?.toString() || '');
+    qs.set('view', next);
+    if (!qs.get('d')) qs.set('d', dayISO);
+    router.push(`/shop?${qs.toString()}`);
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Selector de sede si hay varias */}
+      {currentShop && userShops && userShops.length > 1 && (
+        <div className="px-5 pt-3.5 md:px-8">
+          <ShopSwitcher shop={currentShop} userShops={userShops} />
+        </div>
+      )}
+
       {/* Stats */}
       <div className="px-5 pt-3.5 grid grid-cols-3 gap-2 md:px-8 md:gap-3">
         <Stat k="Hoy"      v={`${total}`} s="turnos"/>
@@ -65,12 +114,128 @@ export function AgendaView({ appointments, barbers, dayISO, workingDays }: { app
         <Stat k="Ingresos" v={shortMoney(ingresos)} s="estimado"/>
       </div>
 
+      {/* Toggle Día / Semana */}
+      <div className="px-5 pt-3 md:px-8">
+        <ViewToggle value={view} onChange={switchView} />
+      </div>
+
+      {view === 'day' ? (
+        <DayView
+          dayISO={dayISO}
+          appointments={appointments}
+          barbers={barbers}
+          slots={slots}
+          startH={startH}
+          endH={endH}
+          workingDays={workingDays}
+          dayIsClosed={dayIsClosed}
+          isToday={isToday}
+          menuFor={menuFor}
+          setMenuFor={setMenuFor}
+          pending={pending}
+          onPick={(id, next) => {
+            setMenuFor(null);
+            start(async () => {
+              setError(null);
+              const r = await setAppointmentStatus(id, next);
+              if ((r as any)?.error) setError((r as any).error);
+            });
+          }}
+          error={error}
+          onCloseError={() => setError(null)}
+        />
+      ) : (
+        <WeekView
+          weekStartISO={weekStartISO || mondayOf(dayISO)}
+          weekAppointments={weekAppointments || []}
+          slots={slots}
+          startH={startH}
+          endH={endH}
+          menuFor={menuFor}
+          setMenuFor={setMenuFor}
+          pending={pending}
+          onPick={(id, next) => {
+            setMenuFor(null);
+            start(async () => {
+              setError(null);
+              const r = await setAppointmentStatus(id, next);
+              if ((r as any)?.error) setError((r as any).error);
+            });
+          }}
+          error={error}
+          onCloseError={() => setError(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Day view                                                          */
+/* ------------------------------------------------------------------ */
+
+function DayView({
+  dayISO, appointments, barbers, slots, startH, endH, workingDays, dayIsClosed, isToday,
+  menuFor, setMenuFor, pending, onPick, error, onCloseError
+}: {
+  dayISO: string;
+  appointments: A[];
+  barbers: any[];
+  slots: Array<{ h: number; m: number; label: string }>;
+  startH: number;
+  endH: number;
+  workingDays?: number[];
+  dayIsClosed: boolean;
+  isToday: boolean;
+  menuFor: string | null;
+  setMenuFor: (v: string | null) => void;
+  pending: boolean;
+  onPick: (id: string, next: StatusOption) => void;
+  error: string | null;
+  onCloseError: () => void;
+}) {
+  const dayPickerRef = useRef<HTMLDivElement>(null);
+  const days = useMemo(() => buildDays(7, workingDays), [workingDays]);
+
+  useEffect(() => {
+    const el = dayPickerRef.current?.querySelector<HTMLElement>(`[data-day="${dayISO}"]`);
+    el?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }, [dayISO]);
+
+  // Agrupar turnos por barbero
+  const byBarber = useMemo(() => {
+    const m = new Map<string, A[]>();
+    for (const b of barbers) m.set(b.id, []);
+    for (const a of appointments) {
+      if (a.status === 'cancelled') continue;
+      const list = m.get(a.barbers?.id);
+      if (list) list.push(a);
+    }
+    return m;
+  }, [appointments, barbers]);
+
+  const now = Date.now();
+  // Línea "now": solo si estamos en el día mostrado y dentro de la ventana horaria.
+  const nowLineTop = useMemo(() => {
+    if (!isToday) return null;
+    const d = new Date();
+    const minutesFromStart = (d.getHours() - startH) * 60 + d.getMinutes();
+    const totalMinutes = (endH - startH) * 60;
+    if (minutesFromStart < 0 || minutesFromStart > totalMinutes) return null;
+    return (minutesFromStart / SLOT_MIN) * SLOT_HEIGHT;
+  }, [isToday, startH, endH, now]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const hasData = appointments.length > 0;
+  const showClosed = dayIsClosed && !hasData;
+
+  return (
+    <>
       {/* Day picker */}
-      <div ref={dayPickerRef} className="px-5 pt-3.5 pb-2.5 flex gap-1.5 overflow-x-auto no-scrollbar md:px-8 md:gap-2">
+      <div ref={dayPickerRef} className="px-5 pt-3 pb-2.5 flex gap-1.5 overflow-x-auto no-scrollbar md:px-8 md:gap-2">
         {days.map(d => {
           const sel = d.iso === dayISO;
           return (
-            <Link key={d.iso} href={`/shop?d=${d.iso}`}
+            <Link key={d.iso} href={`/shop?d=${d.iso}&view=day`}
               data-day={d.iso}
               aria-pressed={sel}
               aria-label={`Ver agenda del ${d.wd} ${d.day}${d.closed ? ' (cerrado)' : ''}`}
@@ -85,127 +250,422 @@ export function AgendaView({ appointments, barbers, dayISO, workingDays }: { app
         })}
       </div>
 
-      {/* Timeline */}
-      <div className="flex-1 overflow-auto px-5 pt-1 pb-5 md:px-8">
-        <div className="flex items-center gap-2 my-3">
-          <div className="font-mono text-[10px] tracking-[2px] text-dark-muted flex-1">
-            {new Date(dayISO + 'T00:00:00').toLocaleDateString('es-AR', { weekday:'long', day:'numeric' }).toUpperCase()} · TODOS LOS BARBEROS
-          </div>
-          <Link href="/shop/nuevo" aria-label="Nuevo turno" className="w-9 h-9 rounded-s grid place-items-center text-white bg-accent active:scale-95 transition">
-            <Icon name="plus" size={16} color="#fff"/>
-          </Link>
+      {/* Header con nueva cita */}
+      <div className="px-5 md:px-8 flex items-center gap-2 pb-2">
+        <div className="font-mono text-[10px] tracking-[2px] text-dark-muted flex-1 truncate">
+          {new Date(dayISO + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric' }).toUpperCase()} · VISTA DÍA
         </div>
+        <Link href={`/shop/nuevo?d=${dayISO}`} aria-label="Nuevo turno"
+          className="w-9 h-9 rounded-s grid place-items-center text-white bg-accent active:scale-95 transition">
+          <Icon name="plus" size={16} color="#fff"/>
+        </Link>
+      </div>
 
-        {error && (
-          <div className="mb-3">
-            <Toast dark tone="error" message={error} onClose={() => setError(null)} />
-          </div>
-        )}
+      {error && (
+        <div className="px-5 md:px-8 pb-2">
+          <Toast dark tone="error" message={error} onClose={onCloseError} />
+        </div>
+      )}
 
-        {appointments.length === 0 ? (
+      {showClosed ? (
+        <div className="px-5 md:px-8 pb-5">
           <EmptyState
             dark
             icon="calendar"
-            title="Día libre"
-            description={isToday ? 'Todavía no hay turnos cargados para hoy. Tocá + para sumar un walk-in.' : 'Este día no tiene turnos.'}
-            ctaLabel="Sumar turno"
-            ctaHref="/shop/nuevo"
+            title="Día cerrado"
+            description="Esta sede no trabaja este día. Podés cambiar los horarios en Ajustes."
           />
-        ) : (
-          <div className="md:grid md:grid-cols-2 md:gap-x-3 xl:grid-cols-3">
-            {appointments.map((a) => {
-              const startMs = new Date(a.starts_at).getTime();
-              const endMs = new Date(a.ends_at).getTime();
-              const isInProgress = a.status === 'in_progress' || (now >= startMs && now < endMs && a.status !== 'completed');
-              const isDone = a.status === 'completed';
-              const isNext = !isInProgress && !isDone && startMs > now && startMs - now < 30 * 60_000;
-              const time = new Date(a.starts_at).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false });
-              const hue = a.barbers?.hue || 55;
-
-              // Insertar la línea AHORA antes del primer turno cuya hora sea >= ahora (solo hoy)
-              const showNowBefore = isToday && !nowInserted && startMs >= now;
-              if (showNowBefore) nowInserted = true;
-
-              return (
-                <Fragment key={a.id}>
-                  {showNowBefore && (
-                    <div className="flex items-center gap-2.5 my-2 md:col-span-full" aria-hidden="true">
-                      <div className="font-mono text-[10px] text-accent tracking-[2px] font-semibold">
-                        AHORA · {nowTimeLabel}
-                      </div>
-                      <div className="flex-1 h-px bg-accent/60" />
-                      <div className="w-1.5 h-1.5 rounded-full bg-accent" />
-                    </div>
-                  )}
-
-                  <div className={`flex gap-3 mb-2 ${isDone ? 'opacity-50' : ''}`}>
-                    <div className="min-w-[46px] pt-3.5">
-                      <div className="font-mono text-[13px] text-bg font-medium">{time}</div>
-                      <div className="text-[9px] text-dark-muted mt-0.5">{a.services?.duration_mins}m</div>
-                    </div>
-                    <div className="flex-1 relative">
-                      <button type="button"
-                        onClick={() => setMenuFor(menuFor === a.id ? null : a.id)}
-                        disabled={pending}
-                        aria-haspopup="menu"
-                        aria-expanded={menuFor === a.id}
-                        aria-label={`Turno ${a.customer_name} a las ${time}. Tocá para cambiar estado.`}
-                        className={`w-full min-h-[56px] rounded-l px-3.5 py-3 flex items-center gap-2.5 text-left transition active:scale-[0.99]
-                          ${isInProgress ? 'text-white border-0 bg-accent' :
-                            isNext ? 'bg-bg text-ink border-0' :
-                            'bg-dark-card text-bg border border-dark-line hover:border-bg/30'}`}
-                        style={{
-                          borderLeft: !isInProgress && !isNext ? `3px solid oklch(0.7 0.08 ${hue})` : undefined
-                        }}>
-                        <Avatar name={a.barbers?.initials || '??'} size={32} hue={hue} dark={!isInProgress && !isNext}/>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[13px] font-semibold truncate">{a.customer_name}</div>
-                          <div className="text-[11px] opacity-80 mt-0.5 truncate">{a.services?.name} · {a.barbers?.name}</div>
-                        </div>
-                        {isDone && <Icon name="check" size={16}/>}
-                        {isInProgress && (
-                          <span className="text-[10px] font-bold px-2 py-1 rounded-xs tracking-wider" style={{ background:'rgba(255,255,255,0.25)' }}>
-                            EN CURSO
-                          </span>
-                        )}
-                        {!isDone && !isInProgress && (
-                          <Icon name="chevron-right" size={16} color={isNext ? '#0E0E0E' : '#F5F3EE'}/>
-                        )}
-                      </button>
-                      {menuFor === a.id && (
-                        <StatusMenu
-                          current={a.status as StatusOption}
-                          disabled={pending}
-                          onPick={(next) => {
-                            setMenuFor(null);
-                            start(async () => {
-                              setError(null);
-                              const r = await setAppointmentStatus(a.id, next);
-                              if ((r as any)?.error) setError((r as any).error);
-                            });
-                          }}
-                          onClose={() => setMenuFor(null)}
-                        />
-                      )}
-                    </div>
-                  </div>
-                </Fragment>
-              );
-            })}
-
-            {/* Si todos los turnos ya pasaron, mostrar el indicador "AHORA" al final */}
-            {isToday && !nowInserted && (
-              <div className="flex items-center gap-2.5 my-2 md:col-span-full" aria-hidden="true">
-                <div className="font-mono text-[10px] text-accent tracking-[2px] font-semibold">
-                  AHORA · {nowTimeLabel}
+        </div>
+      ) : barbers.length === 0 ? (
+        <div className="px-5 md:px-8 pb-5">
+          <EmptyState
+            dark
+            icon="users"
+            title="Sin barberos"
+            description="Todavía no cargaste barberos para esta sede."
+            ctaLabel="Ir a equipo"
+            ctaHref="/shop/equipo"
+          />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-auto px-5 pb-5 md:px-8">
+          <CalendarGrid
+            slots={slots}
+            startH={startH}
+            columns={barbers.map(b => ({
+              id: b.id,
+              kind: 'barber' as const,
+              header: (
+                <div className="flex flex-col items-start">
+                  <div className="text-[12px] font-semibold text-bg truncate max-w-full">{b.name}</div>
+                  <div className="text-[9px] text-dark-muted uppercase tracking-[1.5px]">{b.initials}</div>
                 </div>
-                <div className="flex-1 h-px bg-accent/60" />
-                <div className="w-1.5 h-1.5 rounded-full bg-accent" />
+              ),
+              hue: b.hue,
+              appointments: byBarber.get(b.id) || []
+            }))}
+            dayISO={dayISO}
+            nowLineTop={nowLineTop}
+            menuFor={menuFor}
+            setMenuFor={setMenuFor}
+            pending={pending}
+            onPick={onPick}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Week view                                                         */
+/* ------------------------------------------------------------------ */
+
+function WeekView({
+  weekStartISO, weekAppointments, slots, startH, endH,
+  menuFor, setMenuFor, pending, onPick, error, onCloseError
+}: {
+  weekStartISO: string;
+  weekAppointments: A[];
+  slots: Array<{ h: number; m: number; label: string }>;
+  startH: number;
+  endH: number;
+  menuFor: string | null;
+  setMenuFor: (v: string | null) => void;
+  pending: boolean;
+  onPick: (id: string, next: StatusOption) => void;
+  error: string | null;
+  onCloseError: () => void;
+}) {
+  const weekDays = useMemo(() => buildWeek(weekStartISO), [weekStartISO]);
+  const byDay = useMemo(() => {
+    const m = new Map<string, A[]>();
+    for (const d of weekDays) m.set(d.iso, []);
+    for (const a of weekAppointments) {
+      if (a.status === 'cancelled') continue;
+      const iso = localISO(new Date(a.starts_at));
+      const list = m.get(iso);
+      if (list) list.push(a);
+    }
+    return m;
+  }, [weekAppointments, weekDays]);
+
+  const prevWeek = shiftWeek(weekStartISO, -7);
+  const nextWeek = shiftWeek(weekStartISO, 7);
+  const weekLabel = formatWeekRange(weekStartISO);
+
+  const todayISO = todayLocalISO();
+  const nowLineTop = useMemo(() => {
+    const d = new Date();
+    const isThisWeek = weekDays.some(x => x.iso === todayISO);
+    if (!isThisWeek) return null;
+    const minutesFromStart = (d.getHours() - startH) * 60 + d.getMinutes();
+    const totalMinutes = (endH - startH) * 60;
+    if (minutesFromStart < 0 || minutesFromStart > totalMinutes) return null;
+    return (minutesFromStart / SLOT_MIN) * SLOT_HEIGHT;
+  }, [weekDays, startH, endH, todayISO]);
+
+  return (
+    <>
+      {/* Selector de semana */}
+      <div className="px-5 md:px-8 pt-3 pb-2 flex items-center gap-2">
+        <Link href={`/shop?d=${prevWeek}&view=week`} aria-label="Semana anterior"
+          className="w-9 h-9 rounded-s grid place-items-center border border-dark-line text-bg hover:border-bg/40 transition">
+          <Icon name="arrow-left" size={16}/>
+        </Link>
+        <div className="flex-1 text-center font-mono text-[11px] tracking-[2px] text-bg uppercase truncate">
+          {weekLabel}
+        </div>
+        <Link href={`/shop?d=${nextWeek}&view=week`} aria-label="Semana siguiente"
+          className="w-9 h-9 rounded-s grid place-items-center border border-dark-line text-bg hover:border-bg/40 transition">
+          <Icon name="arrow-right" size={16}/>
+        </Link>
+        <Link href={`/shop/nuevo?d=${todayISO}`} aria-label="Nuevo turno"
+          className="w-9 h-9 rounded-s grid place-items-center text-white bg-accent active:scale-95 transition">
+          <Icon name="plus" size={16} color="#fff"/>
+        </Link>
+      </div>
+
+      {error && (
+        <div className="px-5 md:px-8 pb-2">
+          <Toast dark tone="error" message={error} onClose={onCloseError} />
+        </div>
+      )}
+
+      <div className="flex-1 overflow-auto px-5 pb-5 md:px-8">
+        <CalendarGrid
+          slots={slots}
+          startH={startH}
+          columns={weekDays.map(d => ({
+            id: d.iso,
+            kind: 'day' as const,
+            header: (
+              <Link href={`/shop?d=${d.iso}&view=day`}
+                className={`flex flex-col items-start hover:opacity-90 transition ${d.iso === todayISO ? 'text-accent' : 'text-bg'}`}>
+                <div className="text-[9px] uppercase tracking-[1.5px] opacity-80">{d.wd}</div>
+                <div className="font-display text-[18px] leading-none mt-0.5">{d.day}</div>
+              </Link>
+            ),
+            appointments: byDay.get(d.iso) || [],
+            compact: true
+          }))}
+          dayISO={todayISO}
+          nowLineTop={nowLineTop}
+          menuFor={menuFor}
+          setMenuFor={setMenuFor}
+          pending={pending}
+          onPick={onPick}
+        />
+      </div>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Calendar grid (shared)                                            */
+/* ------------------------------------------------------------------ */
+
+type GridColumn = {
+  id: string;
+  /** Tipo: 'barber' = vista día (id = barber id). 'day' = vista semana (id = dayISO). */
+  kind: 'barber' | 'day';
+  header: React.ReactNode;
+  appointments: A[];
+  /** Color lateral si todas las cards de la columna son del mismo barbero (vista día). Si no, se usa el hue de cada turno. */
+  hue?: number;
+  /** Compact = vista semana (cards chicas, sin avatar grande). */
+  compact?: boolean;
+};
+
+function CalendarGrid({
+  slots, startH, columns, dayISO, nowLineTop, menuFor, setMenuFor, pending, onPick
+}: {
+  slots: Array<{ h: number; m: number; label: string }>;
+  startH: number;
+  columns: GridColumn[];
+  dayISO: string;
+  nowLineTop: number | null;
+  menuFor: string | null;
+  setMenuFor: (v: string | null) => void;
+  pending: boolean;
+  onPick: (id: string, next: StatusOption) => void;
+}) {
+  const timeWidth = 52;
+  const colMinPx = 120;
+  const gridTemplateColumns = `${timeWidth}px repeat(${columns.length}, minmax(${colMinPx}px, 1fr))`;
+
+  const totalMinutes = slots.length * SLOT_MIN;
+  const bodyHeight = slots.length * SLOT_HEIGHT;
+
+  return (
+    <div className="bg-dark-card border border-dark-line rounded-l overflow-hidden">
+      <div className="overflow-x-auto">
+        <div style={{ minWidth: `calc(${timeWidth}px + ${columns.length * colMinPx}px)` }}>
+          {/* Header */}
+          <div
+            className="grid sticky top-0 z-20 bg-dark-card border-b border-dark-line"
+            style={{ gridTemplateColumns }}>
+            <div className="border-r border-dark-line" aria-hidden="true"/>
+            {columns.map(c => (
+              <div key={c.id} className="px-2.5 py-2 border-r border-dark-line last:border-r-0">
+                {c.header}
+              </div>
+            ))}
+          </div>
+
+          {/* Body */}
+          <div className="grid relative" style={{ gridTemplateColumns, height: bodyHeight }}>
+            {/* Columna de horarios */}
+            <div className="border-r border-dark-line relative">
+              {slots.map((s, rowIdx) => (
+                <div
+                  key={`h-${rowIdx}`}
+                  className={`absolute left-0 right-0 text-right pr-2 font-mono text-[10px] text-dark-muted ${s.m === 0 ? 'border-t border-dark-line/60' : 'border-t border-dark-line/20'}`}
+                  style={{ top: rowIdx * SLOT_HEIGHT, height: SLOT_HEIGHT, paddingTop: 2 }}>
+                  {s.m === 0 ? s.label : ''}
+                </div>
+              ))}
+            </div>
+
+            {/* Columnas de datos */}
+            {columns.map(c => (
+              <div key={c.id} className="relative border-r border-dark-line last:border-r-0">
+                {/* Background cells (click → nuevo turno) */}
+                {slots.map((s, rowIdx) => {
+                  const cellDay = c.kind === 'day' ? c.id : dayISO;
+                  const atISO = toISO(cellDay, s.h, s.m);
+                  const href = c.kind === 'barber'
+                    ? `/shop/nuevo?d=${dayISO}&at=${encodeURIComponent(atISO)}&barber=${c.id}`
+                    : `/shop/nuevo?d=${cellDay}&at=${encodeURIComponent(atISO)}`;
+                  return (
+                    <Link
+                      key={`cell-${rowIdx}`}
+                      href={href}
+                      tabIndex={-1}
+                      aria-label="Crear turno"
+                      className={`absolute left-0 right-0 ${s.m === 0 ? 'border-t border-dark-line/60' : 'border-t border-dark-line/20'} hover:bg-dark/40 transition group`}
+                      style={{ top: rowIdx * SLOT_HEIGHT, height: SLOT_HEIGHT }}>
+                      <span className="opacity-0 group-hover:opacity-60 absolute right-1 top-1 text-dark-muted text-[10px]">+</span>
+                    </Link>
+                  );
+                })}
+
+                {/* Cards de turnos */}
+                {c.appointments.map(a => {
+                  const startDate = new Date(a.starts_at);
+                  const endDate = new Date(a.ends_at);
+                  const startMin = startDate.getHours() * 60 + startDate.getMinutes();
+                  const endMin = endDate.getHours() * 60 + endDate.getMinutes();
+                  const windowStartMin = startH * 60;
+                  const windowEndMin = windowStartMin + totalMinutes;
+                  const visibleStart = Math.max(startMin, windowStartMin);
+                  const visibleEnd = Math.min(endMin, windowEndMin);
+                  if (visibleEnd <= visibleStart) return null;
+
+                  const top = ((visibleStart - windowStartMin) / SLOT_MIN) * SLOT_HEIGHT;
+                  const height = ((visibleEnd - visibleStart) / SLOT_MIN) * SLOT_HEIGHT;
+                  const hue = a.barbers?.hue ?? c.hue ?? 55;
+
+                  return (
+                    <AppointmentCard
+                      key={a.id}
+                      appointment={a}
+                      top={top}
+                      height={height}
+                      hue={hue}
+                      compact={c.compact}
+                      menuOpen={menuFor === a.id}
+                      onToggleMenu={() => setMenuFor(menuFor === a.id ? null : a.id)}
+                      onCloseMenu={() => setMenuFor(null)}
+                      disabled={pending}
+                      onPick={(next) => onPick(a.id, next)}
+                    />
+                  );
+                })}
+              </div>
+            ))}
+
+            {/* Línea "ahora" */}
+            {nowLineTop != null && (
+              <div
+                className="absolute left-0 right-0 pointer-events-none z-10"
+                style={{ top: nowLineTop }}
+                aria-hidden="true">
+                <div className="flex items-center">
+                  <div className="w-2 h-2 rounded-full bg-accent" style={{ marginLeft: timeWidth - 4 }}/>
+                  <div className="flex-1 h-[2px] bg-accent/80"/>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AppointmentCard({
+  appointment, top, height, hue, compact, menuOpen, onToggleMenu, onCloseMenu, disabled, onPick
+}: {
+  appointment: A;
+  top: number;
+  height: number;
+  hue: number;
+  compact?: boolean;
+  menuOpen: boolean;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
+  disabled: boolean;
+  onPick: (next: StatusOption) => void;
+}) {
+  const now = Date.now();
+  const startMs = new Date(appointment.starts_at).getTime();
+  const endMs = new Date(appointment.ends_at).getTime();
+  const isInProgress = appointment.status === 'in_progress' || (now >= startMs && now < endMs && appointment.status !== 'completed' && appointment.status !== 'cancelled');
+  const isDone = appointment.status === 'completed';
+  const isNoShow = appointment.status === 'no_show';
+  const time = new Date(appointment.starts_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+  const baseBg = `oklch(0.3 0.04 ${hue})`;
+  const baseBorder = `oklch(0.7 0.1 ${hue})`;
+
+  return (
+    <div
+      className="absolute left-0.5 right-0.5 z-10"
+      style={{ top, height: Math.max(height, 28) }}>
+      <button
+        type="button"
+        onClick={onToggleMenu}
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-label={`Turno ${appointment.customer_name} a las ${time}. Tocá para cambiar estado.`}
+        className={`w-full h-full rounded-s text-left px-1.5 py-1 transition active:scale-[0.99] overflow-hidden
+          ${isInProgress ? 'bg-accent text-white' :
+            isDone ? 'opacity-60' :
+            isNoShow ? 'opacity-50' : ''}`}
+        style={{
+          background: isInProgress ? undefined : baseBg,
+          color: isInProgress ? undefined : '#F5F3EE',
+          borderLeft: isInProgress ? undefined : `3px solid ${baseBorder}`
+        }}>
+        {compact ? (
+          <div className="flex flex-col min-w-0">
+            <div className="font-mono text-[10px] opacity-85 leading-none">{time}</div>
+            <div className="text-[11px] font-semibold truncate mt-0.5">{appointment.customer_name}</div>
+            {height >= 44 && (
+              <div className="text-[10px] opacity-75 truncate mt-0.5">{appointment.barbers?.name}</div>
+            )}
+          </div>
+        ) : (
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-1">
+              <div className="font-mono text-[10px] opacity-85 leading-none">{time}</div>
+              {isInProgress && (
+                <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-xs tracking-wider bg-white/25">
+                  EN CURSO
+                </span>
+              )}
+              {isDone && <Icon name="check" size={12}/>}
+            </div>
+            <div className="text-[12px] font-semibold truncate mt-0.5">{appointment.customer_name}</div>
+            {height >= 44 && appointment.services?.name && (
+              <div className="text-[10px] opacity-75 truncate mt-0.5">
+                {appointment.services.name}
+                {appointment.services.duration_mins ? ` · ${appointment.services.duration_mins}m` : ''}
               </div>
             )}
           </div>
         )}
-      </div>
+      </button>
+      {menuOpen && (
+        <StatusMenu
+          current={appointment.status as StatusOption}
+          disabled={disabled}
+          onPick={onPick}
+          onClose={onCloseMenu}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Small helpers                                                     */
+/* ------------------------------------------------------------------ */
+
+function ViewToggle({ value, onChange }: { value: ViewMode; onChange: (v: ViewMode) => void }) {
+  const btn = (active: boolean) =>
+    `px-3 py-1.5 rounded-full text-[11px] font-semibold tracking-[0.5px] transition active:scale-[0.97]
+     ${active ? 'bg-bg text-ink' : 'bg-dark-card border border-dark-line text-bg hover:border-bg/40'}`;
+  return (
+    <div role="tablist" aria-label="Modo de vista" className="inline-flex gap-1.5">
+      <button type="button" role="tab" aria-selected={value === 'day'} onClick={() => onChange('day')} className={btn(value === 'day')}>
+        Día
+      </button>
+      <button type="button" role="tab" aria-selected={value === 'week'} onClick={() => onChange('week')} className={btn(value === 'week')}>
+        Semana
+      </button>
     </div>
   );
 }
@@ -220,33 +680,6 @@ function Stat({ k, v, s }: { k: string; v: string; s: string }) {
   );
 }
 
-function shortMoney(n: number) {
-  if (n >= 1000) return `$${Math.round(n/1000)}k`;
-  return money(n);
-}
-
-function todayLocalISO() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-}
-
-function buildDays(n: number, workingDays?: number[]) {
-  const out = [];
-  const today = new Date(); today.setHours(0,0,0,0);
-  const openDays: Set<number> | null = workingDays ? new Set(workingDays) : null;
-  for (let i = 0; i < n; i++) {
-    const d = new Date(today.getTime() + i * 86400000);
-    const dow = d.getDay();
-    out.push({
-      iso: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
-      day: d.getDate(),
-      wd: d.toLocaleDateString('es-AR', { weekday: 'short' }).replace('.','').slice(0,3),
-      closed: openDays ? !openDays.has(dow) : false
-    });
-  }
-  return out;
-}
-
 function StatusMenu({
   current, disabled, onPick, onClose
 }: {
@@ -256,6 +689,20 @@ function StatusMenu({
   onClose: () => void;
 }) {
   const options: StatusOption[] = ['confirmed', 'in_progress', 'completed', 'cancelled', 'no_show'];
+  const menuRef = useRef<HTMLUListElement>(null);
+  const [offsetX, setOffsetX] = useState(0);
+
+  // Reposicionamos el menú si se sale del viewport en mobile.
+  useEffect(() => {
+    const el = menuRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const overflowRight = rect.right - window.innerWidth + 8;
+    if (overflowRight > 0) setOffsetX(-overflowRight);
+    const overflowLeft = 8 - rect.left;
+    if (overflowLeft > 0) setOffsetX(overflowLeft);
+  }, []);
+
   return (
     <>
       <button
@@ -265,8 +712,10 @@ function StatusMenu({
         onClick={onClose}
         className="fixed inset-0 z-30 cursor-default"/>
       <ul
+        ref={menuRef}
         role="menu"
-        className="absolute right-2 top-full mt-1 z-40 min-w-[180px] bg-dark-card border border-dark-line rounded-l overflow-hidden shadow-fab-dark">
+        style={{ transform: `translateX(${offsetX}px)` }}
+        className="absolute left-0 top-full mt-1 z-40 min-w-[180px] bg-dark-card border border-dark-line rounded-l overflow-hidden shadow-fab-dark">
         {options.map(opt => {
           const isActive = opt === current;
           return (
@@ -276,7 +725,7 @@ function StatusMenu({
                 role="menuitem"
                 onClick={() => onPick(opt)}
                 disabled={disabled || isActive}
-                className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-[13px] transition
+                className={`w-full flex items-center gap-2 px-3 py-2.5 text-left text-[13px] transition min-h-[44px]
                   ${isActive
                     ? 'bg-bg text-ink font-semibold'
                     : 'text-bg hover:bg-dark'} disabled:opacity-60`}>
@@ -289,4 +738,126 @@ function StatusMenu({
       </ul>
     </>
   );
+}
+
+/* ------------------------------------------------------------------ */
+/*  Utils                                                             */
+/* ------------------------------------------------------------------ */
+
+function shortMoney(n: number) {
+  if (n >= 1000) return `$${Math.round(n / 1000)}k`;
+  return money(n);
+}
+
+function todayLocalISO() {
+  const d = new Date();
+  return localISO(d);
+}
+
+function localISO(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function buildDays(n: number, workingDays?: number[]) {
+  const out: Array<{ iso: string; day: number; wd: string; closed: boolean }> = [];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const openDays: Set<number> | null = workingDays ? new Set(workingDays) : null;
+  for (let i = 0; i < n; i++) {
+    const d = new Date(today.getTime() + i * 86400000);
+    const dow = d.getDay();
+    out.push({
+      iso: localISO(d),
+      day: d.getDate(),
+      wd: d.toLocaleDateString('es-AR', { weekday: 'short' }).replace('.', '').slice(0, 3),
+      closed: openDays ? !openDays.has(dow) : false
+    });
+  }
+  return out;
+}
+
+function buildSlots(startH: number, endH: number) {
+  const out: Array<{ h: number; m: number; label: string }> = [];
+  for (let h = startH; h < endH; h++) {
+    for (let m = 0; m < 60; m += SLOT_MIN) {
+      out.push({ h, m, label: `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}` });
+    }
+  }
+  return out;
+}
+
+function deriveWindow(schedules: ScheduleRow[] | undefined, dow: number | null) {
+  if (!schedules || schedules.length === 0) {
+    return { startH: DEFAULT_START_H, endH: DEFAULT_END_H };
+  }
+  const relevant = dow == null
+    ? schedules.filter(s => s.is_working)
+    : schedules.filter(s => s.is_working && Number(s.day_of_week) === dow);
+  if (relevant.length === 0) return { startH: DEFAULT_START_H, endH: DEFAULT_END_H };
+  let startH = 24;
+  let endH = 0;
+  for (const s of relevant) {
+    const sh = hourFrom(s.start_time);
+    const eh = hourCeilFrom(s.end_time);
+    if (sh < startH) startH = sh;
+    if (eh > endH) endH = eh;
+  }
+  if (startH >= endH) return { startH: DEFAULT_START_H, endH: DEFAULT_END_H };
+  return { startH, endH };
+}
+
+function hourFrom(t: string | null | undefined): number {
+  if (!t) return DEFAULT_START_H;
+  const [h] = t.split(':');
+  const n = Number(h);
+  if (!Number.isFinite(n)) return DEFAULT_START_H;
+  return n;
+}
+function hourCeilFrom(t: string | null | undefined): number {
+  if (!t) return DEFAULT_END_H;
+  const [h, m] = t.split(':');
+  const nh = Number(h);
+  const nm = Number(m);
+  if (!Number.isFinite(nh)) return DEFAULT_END_H;
+  return nm && nm > 0 ? nh + 1 : nh;
+}
+
+function toISO(dayISO: string, h: number, m: number) {
+  return `${dayISO}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
+}
+
+function mondayOf(dayISO: string) {
+  const d = new Date(dayISO + 'T12:00:00');
+  const dow = d.getDay(); // 0=Dom, 1=Lun..
+  const diff = (dow === 0 ? -6 : 1 - dow);
+  d.setDate(d.getDate() + diff);
+  return localISO(d);
+}
+
+function shiftWeek(weekStartISO: string, days: number) {
+  const d = new Date(weekStartISO + 'T12:00:00');
+  d.setDate(d.getDate() + days);
+  return localISO(d);
+}
+
+function buildWeek(weekStartISO: string) {
+  const base = new Date(weekStartISO + 'T12:00:00');
+  const out: Array<{ iso: string; day: number; wd: string }> = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    out.push({
+      iso: localISO(d),
+      day: d.getDate(),
+      wd: d.toLocaleDateString('es-AR', { weekday: 'short' }).replace('.', '').slice(0, 3)
+    });
+  }
+  return out;
+}
+
+function formatWeekRange(weekStartISO: string) {
+  const start = new Date(weekStartISO + 'T12:00:00');
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const fmt = (d: Date) => d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }).replace('.', '');
+  return `SEMANA DEL ${fmt(start)} AL ${fmt(end)}`.toUpperCase();
 }

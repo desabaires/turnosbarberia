@@ -3,12 +3,15 @@ import { Icon } from '@/components/shared/Icon';
 import { Stripe } from '@/components/shared/Stripe';
 
 // Landing page de venta para TurnosBarbería. Server component: sin hooks.
-// Se renderiza como fallback desde /page.tsx cuando no hay sesión ni cookie.
+// Se renderiza desde /page.tsx siempre (landing es la home pública del producto).
+// `viewer` cambia los CTAs del navbar si ya hay sesión (link a su panel).
 
-export function LandingPage() {
+export type LandingViewer = { href: string; label: string } | null;
+
+export function LandingPage({ viewer }: { viewer?: LandingViewer }) {
   return (
     <main className="bg-bg text-ink">
-      <Navbar />
+      <Navbar viewer={viewer ?? null} />
       <Hero />
       <Features />
       <HowItWorks />
@@ -22,7 +25,7 @@ export function LandingPage() {
 
 /* ---------- Navbar ---------- */
 
-function Navbar() {
+function Navbar({ viewer }: { viewer: LandingViewer }) {
   return (
     <header className="fixed top-0 inset-x-0 z-50 bg-bg/90 backdrop-blur border-b border-line">
       <div className="max-w-6xl mx-auto px-5 md:px-8 h-16 flex items-center justify-between">
@@ -34,28 +37,47 @@ function Navbar() {
           <a href="#features" className="text-sm hover:text-ink/70 transition-colors">Features</a>
           <a href="#precios" className="text-sm hover:text-ink/70 transition-colors">Precios</a>
           <a href="#contacto" className="text-sm hover:text-ink/70 transition-colors">Contacto</a>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-ink text-bg text-sm hover:bg-ink2 transition-colors"
-          >
-            Probar demo
-            <Icon name="arrow-right" size={14} />
-          </Link>
+          {viewer ? (
+            <Link
+              href={viewer.href}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-ink text-bg text-sm hover:bg-ink2 transition-colors"
+            >
+              {viewer.label}
+              <Icon name="arrow-right" size={14} />
+            </Link>
+          ) : (
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-ink text-bg text-sm hover:bg-ink2 transition-colors"
+            >
+              Probar demo
+              <Icon name="arrow-right" size={14} />
+            </Link>
+          )}
         </nav>
         <div className="md:hidden flex items-center gap-2">
-          <Link
-            href="/login"
-            className="text-sm hover:text-ink/70 transition-colors"
-          >
-            Entrar
-          </Link>
-          <Link
-            href="/login"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-ink text-bg text-sm"
-          >
-            Demo
-            <Icon name="arrow-right" size={12} />
-          </Link>
+          {viewer ? (
+            <Link
+              href={viewer.href}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-ink text-bg text-sm"
+            >
+              {viewer.label}
+              <Icon name="arrow-right" size={12} />
+            </Link>
+          ) : (
+            <>
+              <Link href="/login" className="text-sm hover:text-ink/70 transition-colors">
+                Entrar
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-ink text-bg text-sm"
+              >
+                Demo
+                <Icon name="arrow-right" size={12} />
+              </Link>
+            </>
+          )}
         </div>
       </div>
       <Stripe />

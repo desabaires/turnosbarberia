@@ -305,7 +305,8 @@ function Pricing() {
             name="Starter"
             description="Para empezar a ordenar la agenda."
             features={[
-              'Hasta 2 barberos',
+              'Hasta 3 barberos',
+              '1 sede',
               'Agenda ilimitada',
               'Dashboard con estadísticas',
               'Recordatorios por email',
@@ -318,9 +319,9 @@ function Pricing() {
             description="Para barberías que crecen."
             features={[
               'Barberos ilimitados',
+              'Sedes ilimitadas',
               'Caja integrada',
               'Stock de productos',
-              'Múltiples sucursales',
               'Dashboard con estadísticas',
               'Soporte prioritario'
             ]}

@@ -22,7 +22,7 @@ export function MyAppointmentsView({ slug, upcoming, history }: { slug: string; 
   const featured = upcoming[0];
   const rest = upcoming.slice(1);
   const reservar = (serviceId?: string) =>
-    `/s/${slug}/reservar${serviceId ? `?service=${serviceId}` : ''}`;
+    `/${slug}/reservar${serviceId ? `?service=${serviceId}` : ''}`;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">

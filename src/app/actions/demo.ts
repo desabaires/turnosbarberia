@@ -14,15 +14,15 @@ const DEMO_COOLDOWN_SECS = 2;
 // Wrappers sin args (Promise<void>) para usarlos como `form action` desde
 // server components de la landing. En caso de éxito `enterDemo` hace
 // `redirect()` que tira NEXT_REDIRECT; en caso de error controlado
-// (cooldown, shop demo faltante) redirigimos a /login con un query param
+// (cooldown, shop demo faltante) redirigimos a /demo con un query param
 // para no devolver payload.
 export async function enterDemoCliente(): Promise<void> {
   const r = await enterDemo('cliente');
-  if (r?.error) redirect(`/login?demo=err&m=${encodeURIComponent(r.error)}`);
+  if (r?.error) redirect(`/demo?err=${encodeURIComponent(r.error)}`);
 }
 export async function enterDemoDueno(): Promise<void> {
   const r = await enterDemo('dueno');
-  if (r?.error) redirect(`/login?demo=err&m=${encodeURIComponent(r.error)}`);
+  if (r?.error) redirect(`/demo?err=${encodeURIComponent(r.error)}`);
 }
 
 function randomPassword(): string {
@@ -95,7 +95,7 @@ export async function enterDemo(role: Role) {
   if (error) return { error: 'No se pudo iniciar sesión demo: ' + error.message };
 
   revalidatePath('/', 'layout');
-  redirect(role === 'dueno' ? '/shop' : `/s/${demoShop.slug}`);
+  redirect(role === 'dueno' ? '/shop' : `/${demoShop.slug}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

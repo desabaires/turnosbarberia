@@ -41,9 +41,9 @@ export function ShopActivationChecklist({ shopName, slug }: { shopName: string; 
 
   const publicUrl = (() => {
     if (typeof window !== 'undefined') {
-      return `${window.location.origin}/s/${slug}`;
+      return `${window.location.origin}/${slug}`;
     }
-    return `/s/${slug}`;
+    return `/${slug}`;
   })();
 
   const shareText = `Reservá tu turno en ${shopName}: ${publicUrl}`;

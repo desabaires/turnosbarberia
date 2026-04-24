@@ -24,6 +24,6 @@ export default async function ShopSlugLayout({
 }) {
   const shop = await getShopBySlug(params.slug);
   if (!shop) notFound();
-  // Cookie `last_shop` gets written by middleware on every `/s/[slug]/*` hit.
+  // Cookie `last_shop` gets written by middleware on every `/[slug]/*` hit.
   return <MobileShell>{children}</MobileShell>;
 }

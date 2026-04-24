@@ -47,7 +47,7 @@ function Navbar({ viewer }: { viewer: LandingViewer }) {
             </Link>
           ) : (
             <Link
-              href="/login?demo=1"
+              href="/demo"
               className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-ink text-bg text-sm hover:bg-ink2 transition-colors"
             >
               Ver demo
@@ -70,7 +70,7 @@ function Navbar({ viewer }: { viewer: LandingViewer }) {
                 Entrar
               </Link>
               <Link
-                href="/login?demo=1"
+                href="/demo"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-ink text-bg text-sm"
               >
                 Demo
@@ -107,7 +107,7 @@ function Hero() {
             </p>
             <div className="mt-10 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
               <Link
-                href="/login?demo=1"
+                href="/demo"
                 className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-ink text-bg text-base hover:bg-ink2 transition-colors"
               >
                 Ver demo
@@ -283,7 +283,7 @@ function HowItWorks() {
     {
       n: '03',
       title: 'Compartís tu link',
-      body: '/s/tu-barberia. Tus clientes reservan solos.'
+      body: '/tu-barberia. Tus clientes reservan solos.'
     }
   ];
   return (
@@ -438,7 +438,7 @@ function Faq() {
     },
     {
       q: '¿Cómo comparto mi barbería con mis clientes?',
-      a: 'Tenés un link único turnosbarberia.com/s/tu-barberia. Lo pegás en Instagram, WhatsApp, lo que quieras.'
+      a: 'Tenés un link único turnosbarberia.com/tu-barberia. Lo pegás en Instagram, WhatsApp, lo que quieras.'
     },
     {
       q: '¿Puedo exportar mis datos?',
@@ -497,7 +497,7 @@ function FinalCta() {
         </p>
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-5">
           <Link
-            href="/login?demo=1"
+            href="/demo"
             className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-bg text-ink text-base hover:bg-bg/90 transition-colors"
           >
             Ver demo
@@ -532,7 +532,7 @@ function Footer() {
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted mb-4">Producto</div>
             <ul className="space-y-2 text-sm">
-              <li><Link href="/login?demo=1" className="hover:text-ink/70">Demo</Link></li>
+              <li><Link href="/demo" className="hover:text-ink/70">Demo</Link></li>
               <li><Link href="/registro" className="hover:text-ink/70">Registro</Link></li>
               <li><Link href="/login" className="hover:text-ink/70">Login</Link></li>
             </ul>

@@ -122,7 +122,7 @@ const CreateShopSchema = z.object({
  * Razonamiento: es menos molesto que bloquear el wizard en el paso final
  * después de que el user ya armó todo. El super-admin igual aprueba la
  * activación (is_active = false al crearse) y puede ajustar el plan desde
- * /desa antes de activar. Esto evita atrapar al user en un estado donde
+ * /desarrollo antes de activar. Esto evita atrapar al user en un estado donde
  * tiene 5 barberos en la UI pero el plan no se los permite.
  */
 const AUTO_PRO_BARBER_THRESHOLD = 3;
@@ -286,7 +286,7 @@ export async function createShop(input: CreateShopInput): Promise<{ error?: stri
   } catch { /* silencioso */ }
 
   revalidatePath('/shop');
-  revalidatePath(`/s/${shopRow.slug}`);
+  revalidatePath(`/${shopRow.slug}`);
   revalidatePath('/', 'layout');
   return {};
 }

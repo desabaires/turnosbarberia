@@ -5,21 +5,14 @@ import { MobileShell } from '@/components/shared/MobileShell';
 
 export const dynamic = 'force-dynamic';
 
-// Si viene con `?demo=1` queremos mostrar siempre los botones de demo,
-// incluso si el visitor tiene una sesión previa — típicamente llega de
-// la landing queriendo ver la demo. Misma lógica cuando la sesión actual
-// es DE CUENTA DEMO (para switchear cliente↔dueño).
-const DEMO_EMAILS = new Set([
-  'cliente.demo@turnosbarberia.app',
-  'dueno.demo@turnosbarberia.app'
-]);
-
-export default async function LoginPage({ searchParams }: { searchParams: { demo?: string } }) {
-  const forceDemo = searchParams?.demo === '1';
+// /login ahora es SOLO magic link para dueños con cuenta. Los flujos de demo
+// viven en /demo. Si el user ya tiene sesión, lo mandamos a su panel (admin)
+// o a la landing (no-admin).
+export default async function LoginPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  if (user && !forceDemo && !DEMO_EMAILS.has((user.email || '').toLowerCase())) {
+  if (user) {
     const { data: profile } = await supabase
       .from('profiles').select('is_admin').eq('id', user.id).maybeSingle();
     redirect((profile as any)?.is_admin ? '/shop' : '/');

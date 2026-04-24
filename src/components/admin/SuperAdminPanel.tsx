@@ -85,7 +85,7 @@ export function SuperAdminPanel({ shops, metrics }: { shops: Row[]; metrics: Met
           <div>
             <div className="font-mono text-[10px] tracking-[2px] text-dark-muted">SUPER ADMIN</div>
             <h1 className="font-display text-[32px] md:text-[40px] leading-none mt-1 -tracking-[1px]">
-              Panel <span className="italic text-accent">/desa</span>
+              Panel <span className="italic text-accent">/desarrollo</span>
             </h1>
           </div>
           <form action={logoutSuperAdmin}>

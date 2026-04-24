@@ -24,8 +24,13 @@ export const TIME_RE = /^[0-2]\d:[0-5]\d$/;
 /** IANA timezone básica (Area/City[/Sub]). No exhaustiva, pero razonable. */
 export const TIMEZONE_RE = /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/;
 
+// Ojo: incluye no solo rutas top-level, sino también subpaths del `/[slug]/*`
+// que colisionarían (`perfil`, `reservar`, `mis-turnos`, etc.), para que
+// nadie registre una barbería con slug "perfil" que pise esas rutas.
 export const RESERVED_SLUGS = new Set([
-  's', 'shop', 'admin', 'api', 'auth', 'login', 'registro', 'onboarding'
+  's', 'shop', 'admin', 'api', 'auth', 'login', 'registro', 'onboarding',
+  'demo', 'desarrollo', 'desa',
+  'perfil', 'confirmacion', 'reservar', 'mis-turnos', 'equipo'
 ]);
 
 // ── Helpers de schema ───────────────────────────────────────────────────────

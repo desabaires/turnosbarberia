@@ -17,7 +17,7 @@ export function SuperAdminLoginForm() {
         <div className="mt-10">
           <div className="font-mono text-[10px] tracking-[3px] text-dark-muted mb-2.5">SUPER ADMIN</div>
           <h1 className="font-display text-[44px] leading-[0.98] -tracking-[1px]">
-            Panel<br/><span className="italic text-accent">/desa</span>
+            Panel<br/><span className="italic text-accent">/desarrollo</span>
           </h1>
           <div className="mt-3 text-[13px] text-dark-muted max-w-[280px]">
             Acceso restringido. Ingresá con tu email y clave de super-admin.

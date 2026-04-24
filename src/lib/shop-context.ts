@@ -4,7 +4,7 @@ import type { Shop } from '@/types/db';
 /**
  * Devuelve el shop por slug (URL pública del cliente).
  * Usa el admin client para no depender de la sesión — el cliente aún no se
- * logueó cuando llega a `/s/[slug]`.
+ * logueó cuando llega a `/[slug]`.
  */
 export async function getShopBySlug(slug: string): Promise<Shop | null> {
   const sb = createAdminClient();

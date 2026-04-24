@@ -64,7 +64,7 @@ export default async function ConfirmationPage({ params }: { params: { slug: str
     <main className="min-h-screen flex flex-col px-5 pt-5 pb-7">
       <div className="flex justify-end">
         <Link
-          href={`/s/${params.slug}`}
+          href={`/${params.slug}`}
           className="w-9 h-9 rounded-l bg-card border border-line grid place-items-center active:scale-95 transition"
           aria-label="Cerrar y volver al inicio"
         >
@@ -145,7 +145,7 @@ export default async function ConfirmationPage({ params }: { params: { slug: str
       />
 
       <Link
-        href={`/s/${params.slug}/mis-turnos`}
+        href={`/${params.slug}/mis-turnos`}
         className="text-center text-[13px] text-muted underline mt-4 py-2"
       >
         Ver mis turnos

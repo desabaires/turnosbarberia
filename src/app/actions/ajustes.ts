@@ -82,7 +82,7 @@ export async function upsertService(input: {
     if (error) return { error: error.message };
   }
   revalidatePath('/shop/ajustes');
-  revalidatePath(`/s/${shop.slug}`);
+  revalidatePath(`/${shop.slug}`);
   return { ok: true };
 }
 
@@ -99,7 +99,7 @@ export async function toggleService(id: string, active: boolean) {
     .eq('shop_id', shop.id);
   if (error) return { error: error.message };
   revalidatePath('/shop/ajustes');
-  revalidatePath(`/s/${shop.slug}`);
+  revalidatePath(`/${shop.slug}`);
   return { ok: true };
 }
 
@@ -197,7 +197,7 @@ export async function upsertBarber(input: {
 
   revalidatePath('/shop/ajustes');
   revalidatePath('/shop/equipo');
-  revalidatePath(`/s/${shop.slug}`);
+  revalidatePath(`/${shop.slug}`);
   return { ok: true };
 }
 
@@ -271,7 +271,7 @@ export async function updateSchedules(
 
   revalidatePath('/shop/ajustes');
   revalidatePath('/shop/equipo');
-  revalidatePath(`/s/${shop.slug}`);
+  revalidatePath(`/${shop.slug}`);
   return { ok: true };
 }
 

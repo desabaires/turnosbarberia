@@ -44,7 +44,7 @@ export async function setShopActive(shopId: string, active: boolean) {
     } catch { /* silencioso */ }
   }
 
-  revalidatePath('/desa');
+  revalidatePath('/desarrollo');
   return { ok: true };
 }
 
@@ -58,7 +58,7 @@ export async function setShopPlan(shopId: string, plan: 'starter' | 'pro') {
   const { error } = await admin.from('shops').update({ plan }).eq('id', shopId);
   if (error) return { error: error.message };
 
-  revalidatePath('/desa');
+  revalidatePath('/desarrollo');
   return { ok: true };
 }
 
@@ -109,6 +109,6 @@ export async function deleteShop(shopId: string, confirmSlug: string) {
   const { error } = await admin.from('shops').delete().eq('id', shopId);
   if (error) return { error: error.message };
 
-  revalidatePath('/desa');
+  revalidatePath('/desarrollo');
   return { ok: true };
 }

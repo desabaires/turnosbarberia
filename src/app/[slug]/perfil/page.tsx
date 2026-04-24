@@ -25,7 +25,7 @@ export default async function PerfilPage({ params }: { params: { slug: string } 
 
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect(`/login?next=/s/${params.slug}/perfil`);
+  if (!user) redirect(`/login?next=/${params.slug}/perfil`);
 
   const { data: profile } = await supabase
     .from('profiles').select('name, email, phone, is_admin').eq('id', user.id).maybeSingle<{
@@ -65,7 +65,7 @@ export default async function PerfilPage({ params }: { params: { slug: string } 
             </div>
             <div className="flex-1 min-w-0">
               <div className="text-[14px] font-semibold truncate">{shop.name}</div>
-              <div className="text-[11px] text-muted font-mono truncate">/s/{shop.slug}</div>
+              <div className="text-[11px] text-muted font-mono truncate">/{shop.slug}</div>
             </div>
           </div>
           <form action={clearLastShopCookie} className="mt-3">

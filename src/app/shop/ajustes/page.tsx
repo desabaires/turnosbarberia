@@ -23,7 +23,7 @@ export default async function AjustesPage() {
   ]);
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-  const publicUrl = `${siteUrl.replace(/\/$/, '')}/s/${shop.slug}`;
+  const publicUrl = `${siteUrl.replace(/\/$/, '')}/${shop.slug}`;
 
   return (
     <main className="flex-1 flex flex-col mx-auto w-full max-w-[440px] md:max-w-none md:mx-0">

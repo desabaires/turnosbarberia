@@ -12,7 +12,7 @@ export default async function MisTurnosPage({ params }: { params: { slug: string
 
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect(`/login?next=/s/${params.slug}/mis-turnos`);
+  if (!user) redirect(`/login?next=/${params.slug}/mis-turnos`);
 
   const nowISO = new Date().toISOString();
   const [{ data: upcoming }, { data: history }] = await Promise.all([

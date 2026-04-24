@@ -1,28 +1,15 @@
 'use client';
 import { useEffect, useState, useTransition } from 'react';
-import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Icon } from '@/components/shared/Icon';
 import { Toast } from '@/components/shared/Toast';
 import { sendMagicLink } from '@/app/actions/auth';
-import { enterDemoCliente, enterDemoDueno } from '@/app/actions/demo';
-import { DemoSubmitButton } from '@/components/client/DemoButton';
 
 export function LoginForm() {
-  const params = useSearchParams();
   const [pendingForm, startForm] = useTransition();
-  const [showEmail, setShowEmail] = useState(false);
   const [msg, setMsg] = useState<{ text: string } | null>(null);
   const [sentToEmail, setSentToEmail] = useState<string | null>(null);
   const [sentName, setSentName] = useState<string>('');
-
-  // Si venimos de un error del enterDemo (fallback), mostramos el mensaje
-  // en un toast.
-  useEffect(() => {
-    if (params.get('demo') === 'err') {
-      const m = params.get('m');
-      setMsg({ text: m ? decodeURIComponent(m) : 'No se pudo entrar a la demo. Probá de nuevo.' });
-    }
-  }, [params]);
 
   // Screen: "Revisá tu email" después de enviar el magic link
   if (sentToEmail) {
@@ -57,129 +44,90 @@ export function LoginForm() {
           <div className="font-mono text-[10px] tracking-[3px] text-dark-muted mb-2.5">SAAS · BARBERÍAS</div>
           <h1 className="font-display text-[56px] leading-[0.95] -tracking-[1px]">Turnos<br/>Barbería</h1>
           <div className="mt-3 text-[13px] text-dark-muted max-w-[280px]">
-            Agenda online, caja y control de equipo. <span className="italic text-accent">Todo en una.</span>
+            Entrá con tu email, <span className="italic text-accent">te mandamos un link mágico.</span>
           </div>
         </div>
 
-        {/* DEMO BANNER */}
-        <div className="mt-7 rounded-2xl border border-dark-line bg-dark-card/60 px-4 py-4 backdrop-blur-sm">
-          <div className="flex items-center gap-2">
-            <span className="rounded-full px-2 py-0.5 text-[9px] font-bold tracking-[2px] bg-accent text-white">DEMO</span>
-            <span className="text-[11px] text-dark-muted uppercase tracking-[1.5px]">Probá la app sin registrarte</span>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <form action={enterDemoCliente}>
-              <DemoSubmitButton label="Cliente" iconName="user" variant="light" />
-            </form>
-            <form action={enterDemoDueno}>
-              <DemoSubmitButton label="Dueño" iconName="settings" variant="dark" />
-            </form>
-          </div>
-          <div className="mt-3 text-[10px] text-dark-muted text-center">
-            Cliente: home, reservar, mis turnos<br/>
-            Dueño: agenda del día, caja, equipo
-          </div>
+        <div className="mt-8">
+          <form
+            className="flex flex-col gap-3"
+            action={(fd) => startForm(async () => {
+              setMsg(null);
+              const nameVal = String(fd.get('name') || '');
+              const emailVal = String(fd.get('email') || '');
+              const res = await sendMagicLink(fd);
+              if (res?.error) setMsg({ text: res.error });
+              else {
+                setSentName(nameVal);
+                setSentToEmail(emailVal);
+              }
+            })}
+          >
+            <label className="bg-dark-card rounded-xl px-4 py-3 border border-dark-line block focus-within:border-accent transition">
+              <span className="block text-[10px] text-dark-muted uppercase tracking-[1.5px] mb-1">Nombre</span>
+              <input
+                name="name"
+                required
+                minLength={2}
+                autoComplete="name"
+                enterKeyHint="next"
+                placeholder="Tu nombre"
+                className="bg-transparent text-bg text-[16px] w-full outline-none placeholder:text-dark-muted/60"
+              />
+            </label>
+            <label className="bg-dark-card rounded-xl px-4 py-3 border border-dark-line flex items-center gap-2.5 focus-within:border-accent transition">
+              <div className="flex-1">
+                <span className="block text-[10px] text-dark-muted uppercase tracking-[1.5px] mb-1">Email</span>
+                <input
+                  name="email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  inputMode="email"
+                  enterKeyHint="send"
+                  placeholder="vos@email.com"
+                  className="bg-transparent text-bg text-[16px] w-full outline-none font-mono placeholder:text-dark-muted/60"
+                />
+              </div>
+              <Icon name="mail" size={18} color="#8C8A83"/>
+            </label>
+
+            {msg && (
+              <Toast
+                dark
+                tone="error"
+                message={msg.text}
+                onClose={() => setMsg(null)}
+                autoDismissMs={5000}
+              />
+            )}
+
+            <button
+              type="submit"
+              disabled={pendingForm}
+              className="bg-accent text-white border-0 px-4 py-3.5 rounded-xl text-[15px] font-semibold flex items-center justify-center gap-2 tracking-wide disabled:opacity-60 active:scale-[0.98] transition"
+            >
+              {pendingForm ? 'Enviando link…' : (<>Entrar <Icon name="arrow-right" size={18} color="#fff"/></>)}
+            </button>
+          </form>
         </div>
 
         <div className="flex-1 min-h-[16px]" />
 
-        {/* Owner login: collapsed by default */}
-        {!showEmail ? (
-          <div className="mt-6 flex flex-col items-center gap-3">
-            <a
-              href="/registro"
-              className="bg-accent text-white w-full px-4 py-3.5 rounded-xl text-[15px] font-semibold flex items-center justify-center gap-2 tracking-wide active:scale-[0.98] transition"
-            >
-              Registrar mi barbería <Icon name="arrow-right" size={18} color="#fff"/>
-            </a>
-            <button
-              type="button"
-              onClick={() => setShowEmail(true)}
-              className="text-[13px] text-dark-muted underline underline-offset-4 hover:text-bg transition"
-            >
-              Ya tengo cuenta, entrar con email
-            </button>
-          </div>
-        ) : (
-          <div className="mt-6">
-            <div className="flex items-center justify-between mb-3">
-              <p className="font-display text-[20px] leading-[1.25] max-w-[280px]">
-                Entrá con tu email,<br/>
-                <span className="italic text-accent">te mandamos un link mágico.</span>
-              </p>
-              <button
-                type="button"
-                onClick={() => { setShowEmail(false); setMsg(null); }}
-                className="text-dark-muted text-[11px] uppercase tracking-[1.5px]"
-                aria-label="Volver"
-              >
-                Volver
-              </button>
-            </div>
-
-            <form
-              className="flex flex-col gap-3"
-              action={(fd) => startForm(async () => {
-                setMsg(null);
-                const nameVal = String(fd.get('name') || '');
-                const emailVal = String(fd.get('email') || '');
-                const res = await sendMagicLink(fd);
-                if (res?.error) setMsg({ text: res.error });
-                else {
-                  setSentName(nameVal);
-                  setSentToEmail(emailVal);
-                }
-              })}
-            >
-              <label className="bg-dark-card rounded-xl px-4 py-3 border border-dark-line block focus-within:border-accent transition">
-                <span className="block text-[10px] text-dark-muted uppercase tracking-[1.5px] mb-1">Nombre</span>
-                <input
-                  name="name"
-                  required
-                  minLength={2}
-                  autoComplete="name"
-                  enterKeyHint="next"
-                  placeholder="Tu nombre"
-                  className="bg-transparent text-bg text-[16px] w-full outline-none placeholder:text-dark-muted/60"
-                />
-              </label>
-              <label className="bg-dark-card rounded-xl px-4 py-3 border border-dark-line flex items-center gap-2.5 focus-within:border-accent transition">
-                <div className="flex-1">
-                  <span className="block text-[10px] text-dark-muted uppercase tracking-[1.5px] mb-1">Email</span>
-                  <input
-                    name="email"
-                    type="email"
-                    required
-                    autoComplete="email"
-                    inputMode="email"
-                    enterKeyHint="send"
-                    placeholder="vos@email.com"
-                    className="bg-transparent text-bg text-[16px] w-full outline-none font-mono placeholder:text-dark-muted/60"
-                  />
-                </div>
-                <Icon name="mail" size={18} color="#8C8A83"/>
-              </label>
-
-              {msg && (
-                <Toast
-                  dark
-                  tone="error"
-                  message={msg.text}
-                  onClose={() => setMsg(null)}
-                  autoDismissMs={5000}
-                />
-              )}
-
-              <button
-                type="submit"
-                disabled={pendingForm}
-                className="bg-accent text-white border-0 px-4 py-3.5 rounded-xl text-[15px] font-semibold flex items-center justify-center gap-2 tracking-wide disabled:opacity-60 active:scale-[0.98] transition"
-              >
-                {pendingForm ? 'Enviando link…' : (<>Entrar <Icon name="arrow-right" size={18} color="#fff"/></>)}
-              </button>
-            </form>
-          </div>
-        )}
+        <div className="mt-8 flex flex-col items-center gap-3">
+          <Link
+            href="/registro"
+            className="text-[13px] text-dark-muted underline underline-offset-4 hover:text-bg transition text-center"
+          >
+            ¿No tenés cuenta todavía? Registrar mi barbería <Icon name="arrow-right" size={12} color="#8C8A83" />
+          </Link>
+          <Link
+            href="/demo"
+            className="text-[13px] text-dark-muted underline underline-offset-4 hover:text-bg transition text-center"
+          >
+            Probá la demo <Icon name="arrow-right" size={12} color="#8C8A83" />
+          </Link>
+        </div>
       </div>
     </main>
   );

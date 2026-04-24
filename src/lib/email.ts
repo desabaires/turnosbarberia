@@ -100,7 +100,7 @@ export async function sendAppointmentReminderToCustomer(args: {
   startsAt: string; // ISO
 }): Promise<SendResult> {
   const when = formatWhen(args.startsAt);
-  const link = `${siteUrl()}/s/${args.shopSlug}/mis-turnos`;
+  const link = `${siteUrl()}/${args.shopSlug}/mis-turnos`;
   const body = `
     <div style="font-family:'Instrument Serif',Times,serif;font-size:26px;line-height:1.15;margin:0 0 6px;">Recordatorio de turno</div>
     <div style="color:#7A766E;font-size:12px;margin-bottom:16px;">en ${escapeHtml(args.shopName)}</div>
@@ -125,7 +125,7 @@ export async function sendBookingConfirmationToCustomer(args: {
   startsAt: string; // ISO
 }): Promise<SendResult> {
   const when = formatWhen(args.startsAt);
-  const link = `${siteUrl()}/s/${args.shopSlug}/mis-turnos`;
+  const link = `${siteUrl()}/${args.shopSlug}/mis-turnos`;
   const body = `
     <div style="font-family:'Instrument Serif',Times,serif;font-size:26px;line-height:1.15;margin:0 0 6px;">Turno confirmado</div>
     <div style="color:#7A766E;font-size:12px;margin-bottom:16px;">en ${escapeHtml(args.shopName)}</div>
@@ -173,7 +173,7 @@ export async function sendNewShopNotificationToSuperAdmin(args: {
       <li>Slug: <code>${escapeHtml(args.slug)}</code></li>
       <li>Owner: ${escapeHtml(args.ownerEmail)}</li>
     </ul>
-    <p style="margin-top:16px;">${button('Revisar en /desa', `${siteUrl()}/desa`)}</p>
+    <p style="margin-top:16px;">${button('Revisar en /desarrollo', `${siteUrl()}/desarrollo`)}</p>
   `;
   return sendEmail({
     to: SUPER_ADMIN_EMAIL,
@@ -187,7 +187,7 @@ export async function sendShopActivatedToOwner(args: {
   shopName: string;
   shopSlug: string;
 }): Promise<SendResult> {
-  const link = `${siteUrl()}/s/${args.shopSlug}`;
+  const link = `${siteUrl()}/${args.shopSlug}`;
   const body = `
     <div style="font-family:'Instrument Serif',Times,serif;font-size:24px;line-height:1.15;margin:0 0 6px;">Tu barbería está activa</div>
     <p>Felicitaciones, <b>${escapeHtml(args.shopName)}</b> ya está visible para tus clientes.</p>

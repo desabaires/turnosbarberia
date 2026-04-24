@@ -31,10 +31,10 @@ export async function loginSuperAdmin(fd: FormData): Promise<{ error?: string }>
     return { error: 'Credenciales inválidas.' };
   }
   setSuperAdminSession();
-  redirect('/desa');
+  redirect('/desarrollo');
 }
 
 export async function logoutSuperAdmin(): Promise<void> {
   clearSuperAdminSession();
-  redirect('/desa/login');
+  redirect('/desarrollo/login');
 }

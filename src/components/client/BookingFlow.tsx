@@ -68,7 +68,7 @@ export function BookingFlow({
     <main className="min-h-screen flex flex-col">
       <header className="px-5 pt-3 pb-3 flex items-center gap-3.5">
         {step === 1 ? (
-          <Link href={`/s/${shopSlug}`} className="w-11 h-11 -ml-1 rounded-l bg-card border border-line grid place-items-center active:scale-95 transition" aria-label="Volver al inicio">
+          <Link href={`/${shopSlug}`} className="w-11 h-11 -ml-1 rounded-l bg-card border border-line grid place-items-center active:scale-95 transition" aria-label="Volver al inicio">
             <Icon name="arrow-left" size={18}/>
           </Link>
         ) : (

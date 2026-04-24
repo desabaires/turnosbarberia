@@ -5,6 +5,6 @@ import { isSuperAdmin } from '@/lib/super-admin-auth';
 export const dynamic = 'force-dynamic';
 
 export default function SuperAdminLoginPage() {
-  if (isSuperAdmin()) redirect('/desa');
+  if (isSuperAdmin()) redirect('/desarrollo');
   return <SuperAdminLoginForm />;
 }

@@ -2,6 +2,20 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 import { LAST_SHOP_COOKIE } from '@/lib/shop-context';
 
+// Paths reservados del top-level: URLs que NO son shop slugs. El middleware
+// solo setea `last_shop` cuando el primer segmento no es uno de estos.
+// Mantenemos también los legacy (`s`, `desa`) por si quedan cookies/links viejos
+// apuntando ahí — evita que un visitante queme la cookie con basura.
+const RESERVED_PATHS = new Set([
+  'api', 'auth', '_next', 'favicon.ico',
+  'shop', 'login', 'registro', 'demo', 'desarrollo',
+  'onboarding', 'admin',
+  // legacy
+  's', 'desa'
+]);
+
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$/;
+
 export async function middleware(request: NextRequest) {
   let response: NextResponse;
   try {
@@ -12,19 +26,20 @@ export async function middleware(request: NextRequest) {
     response = NextResponse.next({ request });
   }
 
-  // Track last-visited shop for the root redirect.
-  // Solo seteamos si el slug matchea el shape esperado (evita que un path
-  // con caracteres raros quede pegado como cookie forever).
-  const match = request.nextUrl.pathname.match(/^\/s\/([^/]+)(?:\/|$)/);
+  // Track last-visited shop para el root redirect.
+  // Solo seteamos si el primer segmento no es una ruta reservada y matchea
+  // el shape de un slug válido (evita que paths raros queden como cookie).
+  const match = request.nextUrl.pathname.match(/^\/([^/]+)(?:\/|$)/);
   if (match) {
-    const slug = match[1];
-    const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$/;
-    if (SLUG_RE.test(slug) && request.cookies.get(LAST_SHOP_COOKIE)?.value !== slug) {
-      response.cookies.set(LAST_SHOP_COOKIE, slug, {
-        path: '/',
-        maxAge: 60 * 60 * 24 * 365,
-        sameSite: 'lax'
-      });
+    const first = match[1];
+    if (!RESERVED_PATHS.has(first) && SLUG_RE.test(first)) {
+      if (request.cookies.get(LAST_SHOP_COOKIE)?.value !== first) {
+        response.cookies.set(LAST_SHOP_COOKIE, first, {
+          path: '/',
+          maxAge: 60 * 60 * 24 * 365,
+          sameSite: 'lax'
+        });
+      }
     }
   }
 

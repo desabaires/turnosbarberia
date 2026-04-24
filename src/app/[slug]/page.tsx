@@ -72,8 +72,8 @@ export default async function ShopHomePage({ params }: { params: { slug: string 
               </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <Link href={`/s/${slug}/mis-turnos`} className="flex-1 bg-transparent text-bg border border-dark-line px-3 py-2.5 rounded-m text-[13px] font-medium text-center active:scale-[0.98] transition">Reprogramar</Link>
-              <Link href={`/s/${slug}/mis-turnos`} className="flex-1 bg-bg text-ink px-3 py-2.5 rounded-m text-[13px] font-semibold text-center active:scale-[0.98] transition">Ver detalles</Link>
+              <Link href={`/${slug}/mis-turnos`} className="flex-1 bg-transparent text-bg border border-dark-line px-3 py-2.5 rounded-m text-[13px] font-medium text-center active:scale-[0.98] transition">Reprogramar</Link>
+              <Link href={`/${slug}/mis-turnos`} className="flex-1 bg-bg text-ink px-3 py-2.5 rounded-m text-[13px] font-semibold text-center active:scale-[0.98] transition">Ver detalles</Link>
             </div>
           </div>
         ) : (
@@ -86,7 +86,7 @@ export default async function ShopHomePage({ params }: { params: { slug: string 
         )}
 
         <Link
-          href={`/s/${slug}/reservar`}
+          href={`/${slug}/reservar`}
           className="mt-3.5 w-full bg-accent text-white border-0 px-4 py-4 rounded-2xl text-[15px] font-semibold flex items-center justify-center gap-2.5 active:scale-[0.98] transition"
         >
           <Icon name="plus" size={18}/> Reservar nuevo turno
@@ -95,13 +95,13 @@ export default async function ShopHomePage({ params }: { params: { slug: string 
         {/* Services */}
         <div className="mt-6 flex items-baseline justify-between">
           <h2 className="font-display text-[22px] -tracking-[0.3px]">Servicios</h2>
-          <Link href={`/s/${slug}/reservar`} className="text-xs text-muted active:opacity-60 transition">Ver todos</Link>
+          <Link href={`/${slug}/reservar`} className="text-xs text-muted active:opacity-60 transition">Ver todos</Link>
         </div>
         <div className="flex flex-col gap-2 mt-3">
           {(services || []).slice(0,4).map(s => (
             <Link
               key={s.id}
-              href={`/s/${slug}/reservar?service=${s.id}`}
+              href={`/${slug}/reservar?service=${s.id}`}
               className="bg-card border border-line rounded-xl px-4 py-3 flex items-center justify-between active:scale-[0.99] active:bg-bg transition"
             >
               <div className="flex items-center gap-3">
@@ -124,7 +124,7 @@ export default async function ShopHomePage({ params }: { params: { slug: string 
           {(barbers || []).map(b => (
             <Link
               key={b.id}
-              href={`/s/${slug}/reservar?barber=${b.id}`}
+              href={`/${slug}/reservar?barber=${b.id}`}
               className="min-w-[132px] bg-card border border-line rounded-xl p-3.5 text-center active:scale-[0.98] transition"
             >
               <div className="flex justify-center"><Avatar name={b.initials} size={48} hue={b.hue}/></div>

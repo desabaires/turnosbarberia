@@ -18,8 +18,8 @@ type ShopRow = {
   created_at: string;
 };
 
-export default async function DesaPage() {
-  if (!isSuperAdmin()) redirect('/desa/login');
+export default async function DesarrolloPage() {
+  if (!isSuperAdmin()) redirect('/desarrollo/login');
 
   const admin = createAdminClient();
 

@@ -7,7 +7,7 @@ type TabDef = {
   id: 'home' | 'team' | 'book' | 'cal' | 'me';
   icon: 'home' | 'users' | 'plus' | 'calendar' | 'user';
   label: string;
-  path: string; // relative, appended to /s/${slug}
+  path: string; // relative, appended to /${slug}
 };
 
 const tabs: readonly TabDef[] = [
@@ -20,7 +20,7 @@ const tabs: readonly TabDef[] = [
 
 export function TabBar({ slug }: { slug: string }) {
   const pathname = usePathname();
-  const base = `/s/${slug}`;
+  const base = `/${slug}`;
   return (
     <nav aria-label="Navegación principal" className="border-t border-line bg-card flex justify-around px-2 pt-2 pb-6">
       {tabs.map(t => {

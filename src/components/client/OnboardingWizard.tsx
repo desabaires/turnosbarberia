@@ -393,7 +393,7 @@ function DoneScreen({ slug, onGoShop }: { slug: string; onGoShop: () => void }) 
 
       <div className="mt-6 bg-card border border-line rounded-2xl px-4 py-3 max-w-[320px] w-full">
         <div className="font-mono text-[10px] tracking-[2px] text-muted">TU LINK PÚBLICO</div>
-        <div className="font-mono text-[13px] text-ink mt-1 break-all">turnosbarberia.com/s/{slug}</div>
+        <div className="font-mono text-[13px] text-ink mt-1 break-all">turnosbarberia.com/{slug}</div>
       </div>
 
       <div className="mt-8 flex flex-col gap-2.5 w-full max-w-[320px]">
@@ -464,7 +464,7 @@ function Step1({
         {slugState.available === false && slugState.reason ? (
           <span className="text-accent">{slugState.reason}</span>
         ) : (
-          <>Preview: <span className="font-mono">turnosbarberia.vercel.app/s/{slug || '...'}</span></>
+          <>Preview: <span className="font-mono">turnosbarberia.vercel.app/{slug || '...'}</span></>
         )}
       </div>
 

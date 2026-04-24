@@ -186,10 +186,10 @@ export async function createBooking(input: z.infer<typeof BookingSchema>) {
     // Silencioso: un fallo de mail no debe tumbar la reserva.
   }
 
-  revalidatePath(`/s/${data.shopSlug}`);
-  revalidatePath(`/s/${data.shopSlug}/mis-turnos`);
+  revalidatePath(`/${data.shopSlug}`);
+  revalidatePath(`/${data.shopSlug}/mis-turnos`);
   revalidatePath('/shop');
-  redirect(`/s/${data.shopSlug}/confirmacion/${appointment!.id}`);
+  redirect(`/${data.shopSlug}/confirmacion/${appointment!.id}`);
 }
 
 export async function cancelAppointment(id: string) {
@@ -210,7 +210,7 @@ export async function cancelAppointment(id: string) {
     const admin = createAdminClient();
     const { data: shop } = await admin
       .from('shops').select('slug').eq('id', appt.shop_id).maybeSingle<{ slug: string }>();
-    if (shop?.slug) revalidatePath(`/s/${shop.slug}/mis-turnos`);
+    if (shop?.slug) revalidatePath(`/${shop.slug}/mis-turnos`);
   }
   return { ok: true };
 }

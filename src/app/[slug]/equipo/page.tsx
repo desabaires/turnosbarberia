@@ -40,7 +40,7 @@ export default async function EquipoPage({ params }: { params: { slug: string } 
             title="Sin equipo cargado"
             description="Pronto vas a poder ver y elegir a tu barbero favorito."
             ctaLabel="Reservar de todas formas"
-            ctaHref={`/s/${slug}/reservar`}
+            ctaHref={`/${slug}/reservar`}
           />
         ) : (
           <div className="flex flex-col gap-3">
@@ -60,7 +60,7 @@ export default async function EquipoPage({ params }: { params: { slug: string } 
                   {b.bio && (
                     <p className="text-[12px] text-muted mt-1.5 line-clamp-2">{b.bio}</p>
                   )}
-                  <Link href={`/s/${slug}/reservar?barber=${b.id}`}
+                  <Link href={`/${slug}/reservar?barber=${b.id}`}
                     className="inline-flex items-center gap-1.5 mt-2.5 text-[12px] font-semibold text-accent active:opacity-60 transition">
                     Reservar con {b.name.split(' ')[0]}
                     <Icon name="arrow-right" size={14} color="#B6754C"/>
@@ -69,7 +69,7 @@ export default async function EquipoPage({ params }: { params: { slug: string } 
               </article>
             ))}
 
-            <Link href={`/s/${slug}/reservar`}
+            <Link href={`/${slug}/reservar`}
               className="mt-2 bg-ink text-bg rounded-2xl px-4 py-4 text-center text-[14px] font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition">
               <Icon name="plus" size={16} color="#F5F3EE"/>
               Reservar sin elegir barbero

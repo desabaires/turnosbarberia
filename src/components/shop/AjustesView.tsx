@@ -552,7 +552,7 @@ function SedesSection({
                   <span className="font-mono text-[9px] tracking-[2px] text-dark-muted uppercase">Pendiente</span>
                 )}
               </div>
-              <div className="text-[11px] text-dark-muted mt-0.5 font-mono truncate">/s/{s.slug}</div>
+              <div className="text-[11px] text-dark-muted mt-0.5 font-mono truncate">/{s.slug}</div>
             </div>
             {!isCurrent && (
               <button
@@ -618,7 +618,7 @@ function SedesSection({
           </Field>
           <Field label="Slug (URL pública)">
             <div className="flex items-center gap-1">
-              <span className="text-dark-muted font-mono text-[13px]">/s/</span>
+              <span className="text-dark-muted font-mono text-[13px]">/</span>
               <input
                 value={draft.slug}
                 onChange={e => {

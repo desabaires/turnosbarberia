@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 // Whitelist de paths permitidos como destino post-login.
 // Cualquier otra cosa (protocolo, //dominio, /\dominio, /%2Fdominio, etc.)
 // se rechaza y se cae al default "/".
-const SAFE_NEXT_RE = /^\/(shop(?:\/.*)?|onboarding|s\/[a-z0-9][a-z0-9-]{1,40}[a-z0-9](?:\/.*)?|registro|login|perfil)?$/;
+const SAFE_NEXT_RE = /^\/(shop(?:\/.*)?|onboarding|registro|login|demo|desarrollo(?:\/.*)?|perfil|[a-z0-9][a-z0-9-]{1,40}[a-z0-9](?:\/.*)?)?$/;
 
 function sanitizeNext(raw: string | null): string {
   if (!raw) return '/';

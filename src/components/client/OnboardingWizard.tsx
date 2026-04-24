@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Icon } from '@/components/shared/Icon';
 import { Toast } from '@/components/shared/Toast';
 import { slugify } from '@/lib/slug';
@@ -26,11 +27,33 @@ const DEFAULT_SCHED: DaySchedule[] = DAYS.map(d => ({
   is_working: d.idx !== 0
 }));
 
+const DEFAULT_SERVICES: ServiceDraft[] = [
+  { name: 'Corte de pelo',    duration_mins: 30, price: 8500 },
+  { name: 'Corte + Barba',    duration_mins: 50, price: 12500 },
+  { name: 'Arreglo de barba', duration_mins: 20, price: 5500 }
+];
+
 const DURATION_OPTIONS = [15, 20, 30, 45, 60, 90, 120];
+
+const DRAFT_KEY = 'onboarding_draft';
+
+type DraftState = {
+  step: 1 | 2 | 3 | 4;
+  shopName: string;
+  shopSlug: string;
+  slugTouched: boolean;
+  shopAddress: string;
+  shopPhone: string;
+  services: ServiceDraft[];
+  barbers: BarberDraft[];
+  perBarber: boolean;
+  generalSched: DaySchedule[];
+  barberSched: Record<string, DaySchedule[]>;
+};
 
 export function OnboardingWizard({ userName }: { userName: string }) {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(1);
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok?: boolean; text: string } | null>(null);
 
@@ -41,10 +64,40 @@ export function OnboardingWizard({ userName }: { userName: string }) {
   const [shopPhone, setShopPhone] = useState('');
   const [slugState, setSlugState] = useState<{ checking: boolean; available: boolean | null; reason?: string }>({ checking: false, available: null });
 
+  const [services, setServices] = useState<ServiceDraft[]>(DEFAULT_SERVICES);
+  const [barbers, setBarbers] = useState<BarberDraft[]>([{ name: userName || 'Yo', role: 'Dueño' }]);
+  const [perBarber, setPerBarber] = useState(false);
+  const [generalSched, setGeneralSched] = useState<DaySchedule[]>(DEFAULT_SCHED);
+  const [barberSched, setBarberSched] = useState<Record<string, DaySchedule[]>>({});
+  const [createdSlug, setCreatedSlug] = useState<string | null>(null);
+
+  // Draft recovery banner
+  const [draftFound, setDraftFound] = useState<DraftState | null>(null);
+  const [draftDecided, setDraftDecided] = useState(false);
+  const hydratedRef = useRef(false);
+
+  // On mount: check for draft
+  useEffect(() => {
+    try {
+      const raw = typeof window !== 'undefined' ? window.localStorage.getItem(DRAFT_KEY) : null;
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<DraftState> | null;
+        if (parsed && (parsed.shopName || parsed.shopSlug)) {
+          setDraftFound(parsed as DraftState);
+          return;
+        }
+      }
+    } catch { /* ignore malformed draft */ }
+    setDraftDecided(true);
+    hydratedRef.current = true;
+  }, []);
+
+  // Auto-derive slug from name (unless touched)
   useEffect(() => {
     if (!slugTouched) setShopSlug(slugify(shopName));
   }, [shopName, slugTouched]);
 
+  // Slug availability check
   const slugDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (slugDebounceRef.current) clearTimeout(slugDebounceRef.current);
@@ -57,20 +110,7 @@ export function OnboardingWizard({ userName }: { userName: string }) {
     return () => { if (slugDebounceRef.current) clearTimeout(slugDebounceRef.current); };
   }, [shopSlug]);
 
-  const [services, setServices] = useState<ServiceDraft[]>([
-    { name: 'Corte de pelo',    duration_mins: 30, price: 8500 },
-    { name: 'Corte + Barba',    duration_mins: 50, price: 12500 },
-    { name: 'Arreglo de barba', duration_mins: 20, price: 5500 }
-  ]);
-
-  const [barbers, setBarbers] = useState<BarberDraft[]>([
-    { name: userName || 'Yo', role: 'Dueño' }
-  ]);
-
-  const [perBarber, setPerBarber] = useState(false);
-  const [generalSched, setGeneralSched] = useState<DaySchedule[]>(DEFAULT_SCHED);
-  const [barberSched, setBarberSched] = useState<Record<string, DaySchedule[]>>({});
-
+  // Keep barberSched keys aligned with barbers length
   useEffect(() => {
     setBarberSched(prev => {
       const next: Record<string, DaySchedule[]> = {};
@@ -80,6 +120,25 @@ export function OnboardingWizard({ userName }: { userName: string }) {
       return next;
     });
   }, [barbers.length]);
+
+  // Autosave to localStorage (debounced) — only after the user decided on the draft
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!draftDecided || !hydratedRef.current) return;
+    if (step === 5) return; // once createdSlug is set we don't save anymore
+    if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    saveDebounceRef.current = setTimeout(() => {
+      try {
+        const snap: DraftState = {
+          step: step as 1 | 2 | 3 | 4,
+          shopName, shopSlug, slugTouched, shopAddress, shopPhone,
+          services, barbers, perBarber, generalSched, barberSched
+        };
+        window.localStorage.setItem(DRAFT_KEY, JSON.stringify(snap));
+      } catch { /* storage might be full or disabled */ }
+    }, 500);
+    return () => { if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current); };
+  }, [draftDecided, step, shopName, shopSlug, slugTouched, shopAddress, shopPhone, services, barbers, perBarber, generalSched, barberSched]);
 
   const step1Valid = useMemo(() => {
     return shopName.trim().length >= 2 && shopSlug.length >= 3 && slugState.available === true;
@@ -105,8 +164,10 @@ export function OnboardingWizard({ userName }: { userName: string }) {
     (step === 4 && step4Valid)
   );
 
-  const submit = () => start(async () => {
+  const submitWith = (overrides?: { perBarber?: boolean; generalSched?: DaySchedule[] }) => start(async () => {
     setMsg(null);
+    const effectivePerBarber = overrides?.perBarber ?? perBarber;
+    const effectiveGeneral = overrides?.generalSched ?? generalSched;
     const res = await createShop({
       shop: {
         name: shopName.trim(),
@@ -117,16 +178,62 @@ export function OnboardingWizard({ userName }: { userName: string }) {
       services: services.map(s => ({ name: s.name.trim(), duration_mins: s.duration_mins, price: s.price })),
       barbers: barbers.map(b => ({ name: b.name.trim(), role: b.role.trim() || undefined })),
       schedules: {
-        perBarber,
-        general: perBarber ? undefined : generalSched,
-        byBarber: perBarber ? barberSched : undefined
+        perBarber: effectivePerBarber,
+        general: effectivePerBarber ? undefined : effectiveGeneral,
+        byBarber: effectivePerBarber ? barberSched : undefined
       }
     });
     if (res?.error) { setMsg({ text: res.error }); return; }
-    setMsg({ ok: true, text: '¡Listo! Redirigiendo a tu panel…' });
-    router.push('/shop');
-    router.refresh();
+    try { window.localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+    setCreatedSlug(shopSlug.trim());
+    setStep(5);
   });
+
+  const submit = () => submitWith();
+
+  const applyDefaultsServicesAndContinue = () => {
+    setServices(DEFAULT_SERVICES.map(s => ({ ...s })));
+    setStep(3);
+  };
+  const applyDefaultsScheduleAndSubmit = () => {
+    const defaults = DEFAULT_SCHED.map(d => ({ ...d }));
+    setPerBarber(false);
+    setGeneralSched(defaults);
+    // Pass overrides directly — setState is async so reading from closure would be stale.
+    submitWith({ perBarber: false, generalSched: defaults });
+  };
+
+  const recoverDraft = () => {
+    if (!draftFound) return;
+    try {
+      if (typeof draftFound.step === 'number') setStep((draftFound.step >= 1 && draftFound.step <= 4 ? draftFound.step : 1) as 1 | 2 | 3 | 4);
+      if (typeof draftFound.shopName === 'string') setShopName(draftFound.shopName);
+      if (typeof draftFound.shopSlug === 'string') setShopSlug(draftFound.shopSlug);
+      if (typeof draftFound.slugTouched === 'boolean') setSlugTouched(draftFound.slugTouched);
+      if (typeof draftFound.shopAddress === 'string') setShopAddress(draftFound.shopAddress);
+      if (typeof draftFound.shopPhone === 'string') setShopPhone(draftFound.shopPhone);
+      if (Array.isArray(draftFound.services) && draftFound.services.length > 0) setServices(draftFound.services);
+      if (Array.isArray(draftFound.barbers) && draftFound.barbers.length > 0) setBarbers(draftFound.barbers);
+      if (typeof draftFound.perBarber === 'boolean') setPerBarber(draftFound.perBarber);
+      if (Array.isArray(draftFound.generalSched)) setGeneralSched(draftFound.generalSched);
+      if (draftFound.barberSched && typeof draftFound.barberSched === 'object') setBarberSched(draftFound.barberSched);
+    } catch { /* if any field is corrupt, just ignore */ }
+    setDraftFound(null);
+    setDraftDecided(true);
+    hydratedRef.current = true;
+  };
+
+  const discardDraft = () => {
+    try { window.localStorage.removeItem(DRAFT_KEY); } catch { /* noop */ }
+    setDraftFound(null);
+    setDraftDecided(true);
+    hydratedRef.current = true;
+  };
+
+  // ---- Success screen ----
+  if (step === 5 && createdSlug) {
+    return <DoneScreen slug={createdSlug} onGoShop={() => { router.push('/shop'); router.refresh(); }}/>;
+  }
 
   return (
     <main className="min-h-screen bg-bg text-ink flex flex-col">
@@ -155,6 +262,33 @@ export function OnboardingWizard({ userName }: { userName: string }) {
       </header>
 
       <div className="flex-1 overflow-auto px-5 pt-4 pb-4">
+        {/* Draft recovery banner */}
+        {draftFound && !draftDecided && (
+          <div className="mb-4 bg-ink text-bg rounded-2xl px-4 py-3.5 flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-full bg-accent/20 border border-accent/40 grid place-items-center flex-shrink-0">
+                <Icon name="clock" size={16} color="#B6754C"/>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-[14px] font-semibold">Tenés un borrador sin terminar</div>
+                <div className="text-[12px] text-dark-muted mt-0.5">
+                  {draftFound.shopName ? `"${draftFound.shopName}"` : 'Datos guardados'} — paso {draftFound.step || 1} de 4
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={discardDraft}
+                className="flex-1 bg-transparent text-bg border border-dark-line px-3 py-2.5 rounded-m text-[13px] font-medium active:scale-[0.98] transition">
+                Empezar de cero
+              </button>
+              <button type="button" onClick={recoverDraft}
+                className="flex-1 bg-accent text-white px-3 py-2.5 rounded-m text-[13px] font-semibold active:scale-[0.98] transition">
+                Recuperar
+              </button>
+            </div>
+          </div>
+        )}
+
         {step === 1 && (
           <Step1
             name={shopName} onName={setShopName}
@@ -195,31 +329,83 @@ export function OnboardingWizard({ userName }: { userName: string }) {
         )}
       </div>
 
-      <footer className="border-t border-line bg-card px-5 pt-3.5 pb-7 flex items-center gap-3">
-        {step > 1 ? (
+      <footer className="border-t border-line bg-card px-5 pt-3.5 pb-7 flex flex-col gap-2.5">
+        {/* Skip-step secondary action (step 2 & 4) */}
+        {step === 2 && (
           <button type="button"
-            onClick={() => setStep((s) => (Math.max(1, s - 1) as 1 | 2 | 3 | 4))}
-            className="bg-card border border-line px-4 py-3 rounded-xl text-[13px] font-medium flex items-center gap-2 active:scale-[0.97] transition">
-            <Icon name="arrow-left" size={16}/> Anterior
-          </button>
-        ) : <div/>}
-        <div className="flex-1"/>
-        {step < 4 ? (
-          <button type="button"
-            disabled={!canNext}
-            onClick={() => setStep((s) => (Math.min(4, s + 1) as 1 | 2 | 3 | 4))}
-            className="bg-accent text-white px-6 py-3.5 rounded-xl text-[14px] font-semibold flex items-center gap-2 disabled:opacity-40 active:scale-[0.97] transition">
-            Siguiente <Icon name="arrow-right" size={16} color="#fff"/>
-          </button>
-        ) : (
-          <button type="button"
-            disabled={!canNext || pending}
-            onClick={submit}
-            className="bg-accent text-white px-6 py-3.5 rounded-xl text-[14px] font-semibold flex items-center gap-2 disabled:opacity-50 active:scale-[0.97] transition">
-            {pending ? 'Creando…' : (<>Crear barbería <Icon name="arrow-right" size={16} color="#fff"/></>)}
+            onClick={applyDefaultsServicesAndContinue}
+            className="w-full bg-transparent border border-line text-ink px-4 py-2.5 rounded-xl text-[12px] font-medium active:scale-[0.98] transition">
+            Usar estos 3 y seguir
           </button>
         )}
+        {step === 4 && (
+          <button type="button"
+            disabled={pending}
+            onClick={applyDefaultsScheduleAndSubmit}
+            className="w-full bg-transparent border border-line text-ink px-4 py-2.5 rounded-xl text-[12px] font-medium disabled:opacity-50 active:scale-[0.98] transition">
+            Usar 10–20 L-S y seguir
+          </button>
+        )}
+
+        <div className="flex items-center gap-3">
+          {step > 1 ? (
+            <button type="button"
+              onClick={() => setStep((s) => (Math.max(1, (s as number) - 1) as 1 | 2 | 3 | 4))}
+              className="bg-card border border-line px-4 py-3 rounded-xl text-[13px] font-medium flex items-center gap-2 active:scale-[0.97] transition">
+              <Icon name="arrow-left" size={16}/> Anterior
+            </button>
+          ) : <div/>}
+          <div className="flex-1"/>
+          {step < 4 ? (
+            <button type="button"
+              disabled={!canNext}
+              onClick={() => setStep((s) => (Math.min(4, (s as number) + 1) as 1 | 2 | 3 | 4))}
+              className="bg-accent text-white px-6 py-3.5 rounded-xl text-[14px] font-semibold flex items-center gap-2 disabled:opacity-40 active:scale-[0.97] transition">
+              Siguiente <Icon name="arrow-right" size={16} color="#fff"/>
+            </button>
+          ) : (
+            <button type="button"
+              disabled={!canNext || pending}
+              onClick={submit}
+              className="bg-accent text-white px-6 py-3.5 rounded-xl text-[14px] font-semibold flex items-center gap-2 disabled:opacity-50 active:scale-[0.97] transition">
+              {pending ? 'Creando…' : (<>Crear barbería <Icon name="arrow-right" size={16} color="#fff"/></>)}
+            </button>
+          )}
+        </div>
       </footer>
+    </main>
+  );
+}
+
+function DoneScreen({ slug, onGoShop }: { slug: string; onGoShop: () => void }) {
+  return (
+    <main className="min-h-screen bg-bg text-ink flex flex-col items-center justify-center px-6 py-10 text-center">
+      <div className="w-[88px] h-[88px] rounded-full bg-ink text-bg grid place-items-center">
+        <Icon name="check" size={40} color="#B6754C" stroke={2.4}/>
+      </div>
+      <h1 className="font-display text-[38px] leading-[1.02] -tracking-[0.5px] mt-6">
+        ¡Listo!
+      </h1>
+      <p className="mt-4 text-[14px] text-muted max-w-[320px] leading-relaxed">
+        Tu barbería ya está creada. Podés ajustar servicios, equipo y horarios desde{' '}
+        <span className="text-ink font-medium">Ajustes</span> cuando quieras.
+      </p>
+
+      <div className="mt-6 bg-card border border-line rounded-2xl px-4 py-3 max-w-[320px] w-full">
+        <div className="font-mono text-[10px] tracking-[2px] text-muted">TU LINK PÚBLICO</div>
+        <div className="font-mono text-[13px] text-ink mt-1 break-all">turnosbarberia.com/s/{slug}</div>
+      </div>
+
+      <div className="mt-8 flex flex-col gap-2.5 w-full max-w-[320px]">
+        <button type="button" onClick={onGoShop}
+          className="bg-accent text-white px-4 py-3.5 rounded-xl text-[15px] font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition">
+          Ir al panel <Icon name="arrow-right" size={18} color="#fff"/>
+        </button>
+        <Link href="/shop/ajustes"
+          className="text-[13px] text-muted underline underline-offset-4 py-2">
+          Abrir ajustes
+        </Link>
+      </div>
     </main>
   );
 }
@@ -480,6 +666,9 @@ function Step4({
     else updateGeneral(dayIdx, patch);
   };
 
+  const toggleLabel = perBarber ? 'Cada barbero con su horario' : 'Mismo horario para todos';
+  const toggleSub = perBarber ? 'Matriz independiente por cada miembro del equipo' : 'Una sola matriz aplica al equipo entero';
+
   return (
     <div className="flex flex-col gap-3">
       <label className="bg-card border border-line rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer select-none">
@@ -494,10 +683,8 @@ function Step4({
           <span className={`absolute top-[2px] w-5 h-5 rounded-full bg-white transition-all ${!perBarber ? 'left-[18px]' : 'left-[2px]'}`}/>
         </span>
         <div className="flex-1">
-          <div className="text-[14px] font-medium">Mismo horario para todos</div>
-          <div className="text-[11px] text-muted mt-0.5">
-            {perBarber ? 'Cada barbero con su horario' : 'Una sola matriz aplica al equipo entero'}
-          </div>
+          <div className="text-[14px] font-medium">{toggleLabel}</div>
+          <div className="text-[11px] text-muted mt-0.5">{toggleSub}</div>
         </div>
       </label>
 

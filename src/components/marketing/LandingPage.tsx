@@ -13,6 +13,7 @@ export function LandingPage() {
       <Features />
       <HowItWorks />
       <Pricing />
+      <Faq />
       <FinalCta />
       <Footer />
     </main>
@@ -82,7 +83,7 @@ function Hero() {
               Agenda abierta 24/7, caja y control de equipo en una sola webapp.
               Sin descargas, sin apps, sin vueltas.
             </p>
-            <div className="mt-10 flex flex-col sm:flex-row gap-3">
+            <div className="mt-10 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5">
               <Link
                 href="/registro"
                 className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-ink text-bg text-base hover:bg-ink2 transition-colors"
@@ -92,9 +93,10 @@ function Hero() {
               </Link>
               <Link
                 href="/login"
-                className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl border border-ink/20 text-ink hover:bg-ink/5 transition-colors"
+                className="inline-flex items-center justify-center sm:justify-start gap-1.5 px-4 py-2 text-sm text-ink/70 hover:text-ink transition-colors"
               >
-                Ver demo en vivo
+                o probá la demo
+                <Icon name="arrow-right" size={14} />
               </Link>
             </div>
             <div className="mt-8 flex items-center gap-6 text-sm text-muted">
@@ -396,6 +398,68 @@ function PricingCard({
   );
 }
 
+/* ---------- FAQ ---------- */
+
+function Faq() {
+  const items: Array<{ q: string; a: string }> = [
+    {
+      q: '¿Hay período de prueba?',
+      a: 'Podés probar la demo en vivo sin registrarte. El registro necesita aprobación manual mientras estamos en beta; mientras tanto no te cobramos nada hasta tener todo andando.'
+    },
+    {
+      q: '¿Qué pasa si supero los 3 barberos en el plan Starter?',
+      a: 'Te avisamos cuando te estés acercando. Para pasar a Pro, escribinos por WhatsApp o mail.'
+    },
+    {
+      q: '¿Mis clientes necesitan crear cuenta?',
+      a: 'No. Pueden reservar como invitados. Si quieren ver su historial, se loguean con un link mágico al mail, sin contraseña.'
+    },
+    {
+      q: '¿Cómo comparto mi barbería con mis clientes?',
+      a: 'Tenés un link único turnosbarberia.com/s/tu-barberia. Lo pegás en Instagram, WhatsApp, lo que quieras.'
+    },
+    {
+      q: '¿Puedo exportar mis datos?',
+      a: 'Sí. Escribinos y te los mandamos en CSV.'
+    },
+    {
+      q: '¿Cómo se paga?',
+      a: 'Transferencia bancaria o MercadoPago mensual (sin suscripción automática).'
+    }
+  ];
+  return (
+    <section id="faq" className="py-16 md:py-24 border-t border-line">
+      <div className="max-w-3xl mx-auto px-5 md:px-8">
+        <div className="mb-10 md:mb-12">
+          <div className="font-mono text-xs uppercase tracking-[0.2em] text-muted mb-4">Preguntas frecuentes</div>
+          <h2 className="font-display text-4xl md:text-6xl leading-tight tracking-tight">
+            Lo que<br />siempre preguntan.
+          </h2>
+        </div>
+        <div>
+          {items.map((it, i) => (
+            <details
+              key={it.q}
+              className={`group py-5 ${i === 0 ? 'border-t' : ''} border-b border-line`}
+            >
+              <summary className="flex items-start justify-between gap-4 cursor-pointer list-none">
+                <span className="font-display text-xl md:text-2xl leading-snug text-ink">{it.q}</span>
+                <span
+                  aria-hidden="true"
+                  className="flex-shrink-0 mt-1 text-muted transition-transform duration-200 group-open:rotate-180"
+                >
+                  <Icon name="chevron-down" size={18} />
+                </span>
+              </summary>
+              <p className="mt-3 text-muted leading-relaxed text-[15px] max-w-[58ch]">{it.a}</p>
+            </details>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 /* ---------- Final CTA ---------- */
 
 function FinalCta() {
@@ -409,7 +473,7 @@ function FinalCta() {
         <p className="text-lg md:text-xl text-dark-muted mt-6 max-w-xl mx-auto">
           Armá tu barbería en minutos. Compartí el link. Dejá de perder turnos.
         </p>
-        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
+        <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-5">
           <Link
             href="/registro"
             className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl bg-bg text-ink text-base hover:bg-bg/90 transition-colors"
@@ -419,9 +483,10 @@ function FinalCta() {
           </Link>
           <Link
             href="/login"
-            className="inline-flex items-center justify-center gap-2 px-6 py-4 rounded-2xl border border-bg/30 text-bg hover:bg-bg/10 transition-colors"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-sm text-dark-muted hover:text-bg transition-colors"
           >
-            Ver demo en vivo
+            o probá la demo
+            <Icon name="arrow-right" size={14} />
           </Link>
         </div>
       </div>

@@ -5,10 +5,11 @@ import { Icon } from '@/components/shared/Icon';
 import { PRODUCT } from '@/lib/shop-info';
 
 const items = [
-  { id: 'agenda', icon: 'calendar', label: 'Agenda',  href: '/shop' },
-  { id: 'caja',   icon: 'cash',     label: 'Caja',    href: '/shop/caja' },
-  { id: 'team',   icon: 'users',    label: 'Equipo',  href: '/shop/equipo' },
-  { id: 'more',   icon: 'settings', label: 'Ajustes', href: '/shop/ajustes' }
+  { id: 'agenda',    icon: 'calendar', label: 'Agenda',    href: '/shop' },
+  { id: 'dashboard', icon: 'star',     label: 'Dashboard', href: '/shop/dashboard' },
+  { id: 'caja',      icon: 'cash',     label: 'Caja',      href: '/shop/caja' },
+  { id: 'team',      icon: 'users',    label: 'Equipo',    href: '/shop/equipo' },
+  { id: 'more',      icon: 'settings', label: 'Ajustes',   href: '/shop/ajustes' }
 ] as const;
 
 export function ShopSidebar({ shop }: { shop: { name: string; slug: string } }) {

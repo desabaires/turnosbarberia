@@ -1,0 +1,467 @@
+'use client';
+import { useEffect, useMemo, useState, useTransition } from 'react';
+import { Icon } from '@/components/shared/Icon';
+import { Toast } from '@/components/shared/Toast';
+import { money } from '@/lib/format';
+import {
+  updateShop,
+  upsertService, toggleService,
+  upsertBarber, toggleBarber,
+  updateSchedules
+} from '@/app/actions/ajustes';
+import type { Shop, Service, Barber, Schedule } from '@/types/db';
+
+type Tab = 'shop' | 'services' | 'team' | 'hours';
+
+const DAYS = [
+  { idx: 1, short: 'Lun', long: 'Lunes' },
+  { idx: 2, short: 'Mar', long: 'Martes' },
+  { idx: 3, short: 'Mié', long: 'Miércoles' },
+  { idx: 4, short: 'Jue', long: 'Jueves' },
+  { idx: 5, short: 'Vie', long: 'Viernes' },
+  { idx: 6, short: 'Sáb', long: 'Sábado' },
+  { idx: 0, short: 'Dom', long: 'Domingo' }
+];
+
+export function AjustesView({
+  shop, services, barbers, schedules, publicUrl
+}: {
+  shop: Shop;
+  services: Service[];
+  barbers: Barber[];
+  schedules: Schedule[];
+  publicUrl: string;
+}) {
+  const [tab, setTab] = useState<Tab>('shop');
+  const [toast, setToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+
+  return (
+    <div className="flex-1 overflow-auto px-5 pt-4 pb-8 md:px-8">
+      {toast && (
+        <div className="mb-3">
+          <Toast dark tone={toast.tone} message={toast.text} onClose={() => setToast(null)} />
+        </div>
+      )}
+
+      {/* Link público */}
+      <PublicLinkBanner publicUrl={publicUrl} />
+
+      {/* Tabs */}
+      <div className="mt-5 flex gap-1 bg-dark-card border border-dark-line rounded-xl p-1 w-full md:max-w-xl overflow-x-auto no-scrollbar">
+        {(['shop', 'services', 'team', 'hours'] as Tab[]).map(t => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setTab(t)}
+            className={`flex-1 min-w-[80px] px-3 py-2 rounded-l text-[12px] font-medium transition whitespace-nowrap
+              ${tab === t ? 'bg-bg text-ink' : 'text-dark-muted hover:text-bg'}`}>
+            {tabLabel(t)}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4 md:max-w-3xl">
+        {tab === 'shop' && <ShopSection shop={shop} onToast={setToast} />}
+        {tab === 'services' && <ServicesSection services={services} onToast={setToast} />}
+        {tab === 'team' && <TeamSection barbers={barbers} onToast={setToast} />}
+        {tab === 'hours' && <HoursSection barbers={barbers} schedules={schedules} onToast={setToast} />}
+      </div>
+    </div>
+  );
+}
+
+function tabLabel(t: Tab) {
+  return t === 'shop' ? 'Barbería' : t === 'services' ? 'Servicios' : t === 'team' ? 'Equipo' : 'Horarios';
+}
+
+// ─── Public link banner ──────────────────────────────────────────────────────
+
+function PublicLinkBanner({ publicUrl }: { publicUrl: string }) {
+  const [copied, setCopied] = useState(false);
+  const wa = `https://wa.me/?text=${encodeURIComponent(`Reservá tu turno en ${publicUrl}`)}`;
+  const ig = `https://www.instagram.com/`;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch { /* noop */ }
+  };
+
+  return (
+    <div className="bg-dark-card border border-dark-line rounded-xl px-4 py-3.5 md:px-5 md:py-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="font-mono text-[10px] tracking-[2px] text-dark-muted">TU LINK PÚBLICO</div>
+          <div className="text-[13px] md:text-[14px] font-mono text-bg mt-1 truncate">{publicUrl}</div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={copy}
+            className="text-[12px] px-3 py-2 rounded-m border border-dark-line text-bg hover:border-bg/30 transition">
+            {copied ? '¡Copiado!' : 'Copiar'}
+          </button>
+          <a href={wa} target="_blank" rel="noopener noreferrer"
+            className="text-[12px] px-3 py-2 rounded-m border border-dark-line text-bg hover:border-bg/30 transition">
+            WhatsApp
+          </a>
+          <a href={ig} target="_blank" rel="noopener noreferrer"
+            className="text-[12px] px-3 py-2 rounded-m border border-dark-line text-bg hover:border-bg/30 transition">
+            Instagram
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shop section ────────────────────────────────────────────────────────────
+
+function ShopSection({ shop, onToast }: { shop: Shop; onToast: (t: { tone: 'success' | 'error'; text: string }) => void }) {
+  const [pending, start] = useTransition();
+  const [name, setName] = useState(shop.name);
+  const [address, setAddress] = useState(shop.address || '');
+  const [phone, setPhone] = useState(shop.phone || '');
+  const [tz, setTz] = useState(shop.timezone);
+
+  const save = () => start(async () => {
+    const r = await updateShop({ name, address, phone, timezone: tz });
+    if (r?.error) onToast({ tone: 'error', text: r.error });
+    else onToast({ tone: 'success', text: 'Datos actualizados' });
+  });
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Field label="Nombre">
+        <input value={name} onChange={e => setName(e.target.value)}
+          className="bg-transparent text-bg w-full outline-none text-[15px]" />
+      </Field>
+      <Field label="Dirección">
+        <input value={address} onChange={e => setAddress(e.target.value)}
+          placeholder="Av. Santa Fe 3200, CABA"
+          className="bg-transparent text-bg w-full outline-none text-[15px]" />
+      </Field>
+      <Field label="Teléfono">
+        <input value={phone} onChange={e => setPhone(e.target.value)}
+          placeholder="+54 9 11 5823 4412"
+          className="bg-transparent text-bg w-full outline-none font-mono text-[14px]" />
+      </Field>
+      <Field label="Timezone">
+        <input value={tz} onChange={e => setTz(e.target.value)}
+          className="bg-transparent text-bg w-full outline-none font-mono text-[13px]" />
+      </Field>
+
+      <div className="flex gap-2 mt-2">
+        <button type="button" onClick={save} disabled={pending}
+          className="bg-accent text-white px-5 py-2.5 rounded-m text-[13px] font-semibold disabled:opacity-50 active:scale-[0.97] transition">
+          {pending ? 'Guardando…' : 'Guardar cambios'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Services section ────────────────────────────────────────────────────────
+
+function ServicesSection({ services, onToast }: { services: Service[]; onToast: (t: { tone: 'success' | 'error'; text: string }) => void }) {
+  const [pending, start] = useTransition();
+  const [draft, setDraft] = useState<{ id?: string; name: string; duration: number; price: number; description: string } | null>(null);
+
+  const save = () => {
+    if (!draft) return;
+    start(async () => {
+      const r = await upsertService({
+        id: draft.id,
+        name: draft.name,
+        duration_mins: draft.duration,
+        price: draft.price,
+        description: draft.description
+      });
+      if (r?.error) onToast({ tone: 'error', text: r.error });
+      else { onToast({ tone: 'success', text: draft.id ? 'Servicio actualizado' : 'Servicio agregado' }); setDraft(null); }
+    });
+  };
+
+  const toggle = (s: Service) => start(async () => {
+    const r = await toggleService(s.id, !s.is_active);
+    if (r?.error) onToast({ tone: 'error', text: r.error });
+    else onToast({ tone: 'success', text: s.is_active ? 'Servicio desactivado' : 'Servicio activado' });
+  });
+
+  return (
+    <div className="flex flex-col gap-3">
+      {services.length === 0 && (
+        <div className="text-[13px] text-dark-muted bg-dark-card border border-dark-line rounded-xl px-4 py-3">
+          Todavía no tenés servicios.
+        </div>
+      )}
+      {services.map(s => (
+        <div key={s.id} className={`bg-dark-card border border-dark-line rounded-xl px-4 py-3 flex items-center gap-3 ${!s.is_active ? 'opacity-60' : ''}`}>
+          <div className="flex-1 min-w-0">
+            <div className="text-[14px] font-semibold text-bg truncate">{s.name}</div>
+            <div className="text-[11px] text-dark-muted mt-0.5 font-mono">
+              {s.duration_mins} min · {money(Number(s.price))}
+            </div>
+          </div>
+          <button type="button" onClick={() => setDraft({ id: s.id, name: s.name, duration: s.duration_mins, price: Number(s.price), description: s.description || '' })}
+            className="text-[11px] px-2.5 py-1.5 rounded-xs border border-dark-line text-bg hover:border-bg/30 transition">
+            Editar
+          </button>
+          <button type="button" onClick={() => toggle(s)} disabled={pending}
+            className="text-[11px] px-2.5 py-1.5 rounded-xs border border-dark-line text-bg hover:border-bg/30 transition">
+            {s.is_active ? 'Pausar' : 'Activar'}
+          </button>
+        </div>
+      ))}
+
+      {!draft && (
+        <button type="button"
+          onClick={() => setDraft({ name: '', duration: 30, price: 0, description: '' })}
+          className="mt-1 rounded-xl border border-dashed border-dark-line px-4 py-3 text-[13px] text-dark-muted flex items-center justify-center gap-2 hover:border-bg/30 hover:text-bg transition">
+          <Icon name="plus" size={16} /> Agregar servicio
+        </button>
+      )}
+
+      {draft && (
+        <div className="bg-dark-card border border-dark-line rounded-xl p-4 flex flex-col gap-2.5">
+          <div className="font-mono text-[10px] tracking-[2px] text-dark-muted">
+            {draft.id ? 'EDITAR SERVICIO' : 'NUEVO SERVICIO'}
+          </div>
+          <Field label="Nombre">
+            <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })}
+              className="bg-transparent text-bg w-full outline-none text-[15px]" placeholder="Corte de pelo" />
+          </Field>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Duración (min)">
+              <input type="number" min={5} max={480} value={draft.duration}
+                onChange={e => setDraft({ ...draft, duration: Math.max(5, Number(e.target.value) || 0) })}
+                className="bg-transparent text-bg w-full outline-none font-mono text-[14px]" />
+            </Field>
+            <Field label="Precio">
+              <input type="number" min={0} value={draft.price}
+                onChange={e => setDraft({ ...draft, price: Math.max(0, Number(e.target.value) || 0) })}
+                className="bg-transparent text-bg w-full outline-none font-mono text-[14px]" />
+            </Field>
+          </div>
+          <Field label="Descripción (opcional)">
+            <input value={draft.description} onChange={e => setDraft({ ...draft, description: e.target.value })}
+              className="bg-transparent text-bg w-full outline-none text-[14px]" />
+          </Field>
+          <div className="flex gap-2 mt-1">
+            <button type="button" onClick={save} disabled={pending}
+              className="bg-accent text-white px-4 py-2.5 rounded-m text-[13px] font-semibold disabled:opacity-50 active:scale-[0.97] transition">
+              {pending ? 'Guardando…' : 'Guardar'}
+            </button>
+            <button type="button" onClick={() => setDraft(null)}
+              className="px-4 py-2.5 rounded-m border border-dark-line text-bg text-[13px] hover:border-bg/30 transition">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Team section ────────────────────────────────────────────────────────────
+
+function TeamSection({ barbers, onToast }: { barbers: Barber[]; onToast: (t: { tone: 'success' | 'error'; text: string }) => void }) {
+  const [pending, start] = useTransition();
+  const [draft, setDraft] = useState<{ id?: string; name: string; role: string } | null>(null);
+
+  const save = () => {
+    if (!draft) return;
+    start(async () => {
+      const r = await upsertBarber({ id: draft.id, name: draft.name, role: draft.role });
+      if (r?.error) onToast({ tone: 'error', text: r.error });
+      else { onToast({ tone: 'success', text: draft.id ? 'Barbero actualizado' : 'Barbero agregado' }); setDraft(null); }
+    });
+  };
+
+  const toggle = (b: Barber) => start(async () => {
+    const r = await toggleBarber(b.id, !b.is_active);
+    if (r?.error) onToast({ tone: 'error', text: r.error });
+    else onToast({ tone: 'success', text: b.is_active ? 'Barbero desactivado' : 'Barbero activado' });
+  });
+
+  return (
+    <div className="flex flex-col gap-3">
+      {barbers.length === 0 && (
+        <div className="text-[13px] text-dark-muted bg-dark-card border border-dark-line rounded-xl px-4 py-3">
+          Todavía no tenés barberos.
+        </div>
+      )}
+      {barbers.map(b => (
+        <div key={b.id} className={`bg-dark-card border border-dark-line rounded-xl px-4 py-3 flex items-center gap-3 ${!b.is_active ? 'opacity-60' : ''}`}>
+          <div className="w-10 h-10 rounded-full bg-dark text-bg grid place-items-center font-mono text-[12px] font-semibold flex-shrink-0"
+            style={{ background: `oklch(0.3 0.05 ${b.hue})` }}>
+            {b.initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-[14px] font-semibold text-bg truncate">{b.name}</div>
+            <div className="text-[11px] text-dark-muted mt-0.5 truncate">{b.role || '—'}</div>
+          </div>
+          <button type="button" onClick={() => setDraft({ id: b.id, name: b.name, role: b.role || '' })}
+            className="text-[11px] px-2.5 py-1.5 rounded-xs border border-dark-line text-bg hover:border-bg/30 transition">
+            Editar
+          </button>
+          <button type="button" onClick={() => toggle(b)} disabled={pending}
+            className="text-[11px] px-2.5 py-1.5 rounded-xs border border-dark-line text-bg hover:border-bg/30 transition">
+            {b.is_active ? 'Pausar' : 'Activar'}
+          </button>
+        </div>
+      ))}
+
+      {!draft && (
+        <button type="button"
+          onClick={() => setDraft({ name: '', role: '' })}
+          className="mt-1 rounded-xl border border-dashed border-dark-line px-4 py-3 text-[13px] text-dark-muted flex items-center justify-center gap-2 hover:border-bg/30 hover:text-bg transition">
+          <Icon name="plus" size={16} /> Agregar barbero
+        </button>
+      )}
+
+      {draft && (
+        <div className="bg-dark-card border border-dark-line rounded-xl p-4 flex flex-col gap-2.5">
+          <div className="font-mono text-[10px] tracking-[2px] text-dark-muted">
+            {draft.id ? 'EDITAR BARBERO' : 'NUEVO BARBERO'}
+          </div>
+          <Field label="Nombre">
+            <input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })}
+              className="bg-transparent text-bg w-full outline-none text-[15px]" placeholder="Tomás Aguirre" />
+          </Field>
+          <Field label="Rol (opcional)">
+            <input value={draft.role} onChange={e => setDraft({ ...draft, role: e.target.value })}
+              className="bg-transparent text-bg w-full outline-none text-[14px]" placeholder="Senior · 5 años" />
+          </Field>
+          <div className="flex gap-2 mt-1">
+            <button type="button" onClick={save} disabled={pending}
+              className="bg-accent text-white px-4 py-2.5 rounded-m text-[13px] font-semibold disabled:opacity-50 active:scale-[0.97] transition">
+              {pending ? 'Guardando…' : 'Guardar'}
+            </button>
+            <button type="button" onClick={() => setDraft(null)}
+              className="px-4 py-2.5 rounded-m border border-dark-line text-bg text-[13px] hover:border-bg/30 transition">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Hours section ───────────────────────────────────────────────────────────
+
+type DraftSched = Record<number, { start: string; end: string; on: boolean }>;
+
+function HoursSection({ barbers, schedules, onToast }: { barbers: Barber[]; schedules: Schedule[]; onToast: (t: { tone: 'success' | 'error'; text: string }) => void }) {
+  const [pending, start] = useTransition();
+  const active = useMemo(() => barbers.filter(b => b.is_active), [barbers]);
+  const [barberId, setBarberId] = useState<string>(active[0]?.id || '');
+  const [draft, setDraft] = useState<DraftSched>({});
+
+  useEffect(() => {
+    if (!barberId && active[0]) setBarberId(active[0].id);
+  }, [active, barberId]);
+
+  useEffect(() => {
+    if (!barberId) return;
+    const next: DraftSched = {};
+    for (let d = 0; d < 7; d++) {
+      const row = schedules.find(s => s.barber_id === barberId && s.day_of_week === d);
+      next[d] = {
+        start: (row?.start_time || '10:00').slice(0, 5),
+        end: (row?.end_time || '20:00').slice(0, 5),
+        on: row?.is_working ?? (d !== 0)
+      };
+    }
+    setDraft(next);
+  }, [barberId, schedules]);
+
+  const patch = (day: number, v: Partial<{ start: string; end: string; on: boolean }>) => {
+    setDraft(prev => ({ ...prev, [day]: { ...prev[day], ...v } }));
+  };
+
+  const save = () => {
+    if (!barberId) return;
+    start(async () => {
+      const days = Array.from({ length: 7 }, (_, i) => ({
+        day_of_week: i,
+        start_time: draft[i]?.start || '10:00',
+        end_time: draft[i]?.end || '20:00',
+        is_working: !!draft[i]?.on
+      }));
+      const r = await updateSchedules(barberId, days);
+      if (r?.error) onToast({ tone: 'error', text: r.error });
+      else onToast({ tone: 'success', text: 'Horarios actualizados' });
+    });
+  };
+
+  if (active.length === 0) {
+    return (
+      <div className="text-[13px] text-dark-muted bg-dark-card border border-dark-line rounded-xl px-4 py-3">
+        Agregá barberos en la pestaña Equipo primero.
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+        {active.map(b => (
+          <button key={b.id} type="button"
+            onClick={() => setBarberId(b.id)}
+            className={`px-3 py-2 rounded-l text-[12px] font-medium transition whitespace-nowrap
+              ${b.id === barberId ? 'bg-bg text-ink' : 'bg-dark-card border border-dark-line text-bg'}`}>
+            {b.name}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        {DAYS.map(d => {
+          const row = draft[d.idx] || { start: '10:00', end: '20:00', on: false };
+          return (
+            <div key={d.idx} className={`bg-dark-card border border-dark-line rounded-xl px-3 py-2.5 flex items-center gap-3 ${!row.on ? 'opacity-60' : ''}`}>
+              <div className="w-12 text-[13px] font-medium text-bg">{d.short}</div>
+              <button type="button"
+                onClick={() => patch(d.idx, { on: !row.on })}
+                aria-pressed={row.on}
+                className={`w-9 h-5 rounded-full transition flex-shrink-0 ${row.on ? 'bg-accent' : 'bg-dark-line'} relative`}>
+                <span className={`absolute top-[2px] w-4 h-4 rounded-full bg-white transition-all ${row.on ? 'left-[18px]' : 'left-[2px]'}`} />
+              </button>
+              <div className="flex-1 flex items-center gap-2 justify-end">
+                <input type="time" value={row.start} disabled={!row.on}
+                  onChange={e => patch(d.idx, { start: e.target.value })}
+                  className="bg-transparent text-bg outline-none font-mono text-[13px] border border-dark-line rounded-m px-2 py-1 disabled:opacity-50" />
+                <span className="text-dark-muted text-[11px]">—</span>
+                <input type="time" value={row.end} disabled={!row.on}
+                  onChange={e => patch(d.idx, { end: e.target.value })}
+                  className="bg-transparent text-bg outline-none font-mono text-[13px] border border-dark-line rounded-m px-2 py-1 disabled:opacity-50" />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="flex gap-2 mt-2">
+        <button type="button" onClick={save} disabled={pending}
+          className="bg-accent text-white px-5 py-2.5 rounded-m text-[13px] font-semibold disabled:opacity-50 active:scale-[0.97] transition">
+          {pending ? 'Guardando…' : 'Guardar horarios'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="bg-dark-card border border-dark-line rounded-xl px-4 py-2.5 block focus-within:border-bg/30 transition">
+      <span className="block text-[10px] text-dark-muted uppercase tracking-[1.5px] mb-0.5">{label}</span>
+      {children}
+    </label>
+  );
+}

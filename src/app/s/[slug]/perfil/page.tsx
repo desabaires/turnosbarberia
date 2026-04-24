@@ -1,7 +1,8 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import { getShopBySlug } from '@/lib/shop-context';
+import { getShopBySlug, LAST_SHOP_COOKIE } from '@/lib/shop-context';
 import { TabBar } from '@/components/client/TabBar';
 import { Icon } from '@/components/shared/Icon';
 import { Avatar } from '@/components/shared/Avatar';
@@ -11,6 +12,12 @@ import { signOut } from '@/app/actions/auth';
 export const dynamic = 'force-dynamic';
 
 const APP_VERSION = 'v0.1.0';
+
+async function clearLastShopCookie() {
+  'use server';
+  cookies().delete(LAST_SHOP_COOKIE);
+  redirect('/');
+}
 
 export default async function PerfilPage({ params }: { params: { slug: string } }) {
   const shop = await getShopBySlug(params.slug);
@@ -47,6 +54,28 @@ export default async function PerfilPage({ params }: { params: { slug: string } 
 
         <div className="mt-3">
           <EmailNotifsToggle />
+        </div>
+
+        {/* Barbería section */}
+        <div className="mt-3 bg-card border border-line rounded-2xl p-4">
+          <div className="font-mono text-[10px] tracking-[2px] text-muted">BARBERÍA</div>
+          <div className="mt-1.5 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-m bg-bg grid place-items-center flex-shrink-0">
+              <Icon name="scissors" size={16}/>
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-[14px] font-semibold truncate">{shop.name}</div>
+              <div className="text-[11px] text-muted font-mono truncate">/s/{shop.slug}</div>
+            </div>
+          </div>
+          <form action={clearLastShopCookie} className="mt-3">
+            <button
+              type="submit"
+              className="w-full bg-transparent border border-line text-ink rounded-xl px-4 py-2.5 text-[13px] font-medium flex items-center justify-center gap-2 active:scale-[0.99] transition">
+              <Icon name="search" size={14}/>
+              Buscar otra barbería
+            </button>
+          </form>
         </div>
 
         {profile?.is_admin && (

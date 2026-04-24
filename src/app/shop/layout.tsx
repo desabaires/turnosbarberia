@@ -22,6 +22,21 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
         <ShopSidebar shop={{ name: shop.name, slug: shop.slug }}/>
       </aside>
       <div className="flex-1 min-w-0 flex flex-col min-h-screen">
+        {!shop.is_active && (
+          <div
+            role="status"
+            className="bg-accent/15 border-b border-accent/40 text-bg px-5 py-3 md:px-8">
+            <div className="max-w-5xl mx-auto flex items-start gap-3 text-[13px]">
+              <span className="font-mono text-[10px] tracking-[2px] text-accent font-semibold mt-0.5 uppercase shrink-0">
+                Pendiente
+              </span>
+              <div className="flex-1">
+                Tu barbería está <b>pendiente de aprobación</b>. Te avisamos por email cuando esté activa.
+                Mientras tanto podés terminar de configurarla en Ajustes.
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex-1 flex flex-col">
           {children}
         </div>

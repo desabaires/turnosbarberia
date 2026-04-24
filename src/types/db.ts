@@ -1,6 +1,7 @@
 export type AppointmentStatus = 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show';
-export type SaleType = 'service' | 'product';
+export type SaleType = 'service' | 'product' | 'other';
 export type PaymentMethod = 'efectivo' | 'transferencia' | 'debito' | 'credito';
+export type ShopPlan = 'starter' | 'pro';
 
 export type Shop = {
   id: string;
@@ -11,6 +12,7 @@ export type Shop = {
   timezone: string;
   owner_id: string | null;
   is_active: boolean;
+  plan: ShopPlan | string;
   created_at: string;
 };
 
@@ -83,6 +85,9 @@ export type Product = {
   price: number;
   stock: number;
   is_active: boolean;
+  provider: string | null;
+  unit: string;
+  cost: number | null;
   created_at: string;
 };
 
@@ -95,6 +100,18 @@ export type Sale = {
   amount: number;
   payment_method: PaymentMethod;
   customer_name: string | null;
+  description: string | null;
+  created_at: string;
+};
+
+export type Expense = {
+  id: string;
+  shop_id: string;
+  category: string;
+  description: string | null;
+  amount: number;
+  payment_method: PaymentMethod;
+  paid_at: string;
   created_at: string;
 };
 
@@ -109,6 +126,7 @@ export type Database = {
       appointments: { Row: Appointment; Insert: Partial<Appointment>; Update: Partial<Appointment> };
       products: { Row: Product; Insert: Partial<Product>; Update: Partial<Product> };
       sales: { Row: Sale; Insert: Partial<Sale>; Update: Partial<Sale> };
+      expenses: { Row: Expense; Insert: Partial<Expense>; Update: Partial<Expense> };
     };
   };
 };

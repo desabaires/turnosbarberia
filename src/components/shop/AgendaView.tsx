@@ -14,10 +14,10 @@ type A = {
   barbers: { id: string; name: string; initials: string; hue: number };
 };
 
-export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[]; barbers: any[]; dayISO: string }) {
+export function AgendaView({ appointments, barbers, dayISO, workingDays }: { appointments: A[]; barbers: any[]; dayISO: string; workingDays?: number[] }) {
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const days = useMemo(() => buildDays(7), []);
+  const days = useMemo(() => buildDays(7, workingDays), [workingDays]);
   const total = appointments.length;
   const done = appointments.filter(a => a.status === 'completed').length;
   const ingresos = appointments
@@ -205,16 +205,18 @@ function todayLocalISO() {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
-function buildDays(n: number) {
+function buildDays(n: number, workingDays?: number[]) {
   const out = [];
   const today = new Date(); today.setHours(0,0,0,0);
+  const openDays: Set<number> | null = workingDays ? new Set(workingDays) : null;
   for (let i = 0; i < n; i++) {
     const d = new Date(today.getTime() + i * 86400000);
+    const dow = d.getDay();
     out.push({
       iso: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
       day: d.getDate(),
       wd: d.toLocaleDateString('es-AR', { weekday: 'short' }).replace('.','').slice(0,3),
-      closed: d.getDay() === 0
+      closed: openDays ? !openDays.has(dow) : false
     });
   }
   return out;

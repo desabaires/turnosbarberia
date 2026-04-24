@@ -10,6 +10,10 @@ import {
   RECENT_BOOKINGS_MAX_AGE,
   appendRecentBooking
 } from '@/lib/booking-cookie';
+import {
+  sendBookingConfirmationToCustomer,
+  sendBookingNotificationToAdmin
+} from '@/lib/email';
 
 const NAME_RE  = /^[\p{L}\s'.-]{2,80}$/u;
 const PHONE_RE = /^[+\d\s()-]{6,30}$/;
@@ -144,6 +148,43 @@ export async function createBooking(input: z.infer<typeof BookingSchema>) {
     path: '/',
     maxAge: RECENT_BOOKINGS_MAX_AGE
   });
+
+  // Emails transaccionales (best-effort, no bloquean el flujo).
+  try {
+    const [{ data: svcRow }, { data: bbRow }, { data: shopOwner }] = await Promise.all([
+      admin.from('services').select('name').eq('id', data.serviceId).maybeSingle<{ name: string }>(),
+      admin.from('barbers').select('name').eq('id', barberId).maybeSingle<{ name: string }>(),
+      shop.owner_id
+        ? admin.auth.admin.getUserById(shop.owner_id)
+        : Promise.resolve({ data: null } as any)
+    ]);
+    const serviceName = svcRow?.name || 'Servicio';
+    const barberName = bbRow?.name || 'tu barbero';
+
+    await sendBookingConfirmationToCustomer({
+      to: data.customerEmail,
+      customerName: data.customerName,
+      shopName: shop.name,
+      shopSlug: shop.slug,
+      serviceName,
+      barberName,
+      startsAt: startsAt.toISOString()
+    });
+
+    const ownerEmail = (shopOwner as any)?.data?.user?.email;
+    if (ownerEmail) {
+      await sendBookingNotificationToAdmin({
+        to: ownerEmail,
+        shopName: shop.name,
+        customerName: data.customerName,
+        serviceName,
+        barberName,
+        startsAt: startsAt.toISOString()
+      });
+    }
+  } catch {
+    // Silencioso: un fallo de mail no debe tumbar la reserva.
+  }
 
   revalidatePath(`/s/${data.shopSlug}`);
   revalidatePath(`/s/${data.shopSlug}/mis-turnos`);

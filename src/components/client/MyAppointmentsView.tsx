@@ -93,7 +93,7 @@ export function MyAppointmentsView({ slug, upcoming, history }: { slug: string; 
               <EmptyState
                 icon="scissors"
                 title="Sin historial todavía"
-                description="Acá vas a ver tus turnos pasados cuando empieces a usar la app."
+                description="Después de tu primer turno aparece acá."
                 ctaLabel="Reservar el primero"
                 ctaHref={reservar()}
               />

@@ -13,12 +13,14 @@ import type { Service, Barber } from '@/types/db';
 type Slot = { time: string; iso: string; taken: boolean };
 
 export function BookingFlow({
-  shopSlug, services, barbers, preselectedService, preselectedBarber, profile
+  shopSlug, services, barbers, preselectedService, preselectedBarber, profile, workingDays
 }: {
   shopSlug: string;
   services: Service[]; barbers: Barber[];
   preselectedService?: string; preselectedBarber?: string;
   profile: { name: string; email: string | null; phone: string | null } | null;
+  /** Días de la semana en los que al menos un barbero trabaja (0=Dom..6=Sab). Si no se pasa, se asumen todos abiertos. */
+  workingDays?: number[];
 }) {
   const [step, setStep] = useState<1|2|3>(preselectedService ? 2 : 1);
   const [prevStep, setPrevStep] = useState<1|2|3>(step);
@@ -38,7 +40,7 @@ export function BookingFlow({
   const [error, setError] = useState<string | null>(null);
 
   const service = useMemo(() => services.find(s => s.id === serviceId) || null, [services, serviceId]);
-  const days = useMemo(() => buildNextDays(14), []);
+  const days = useMemo(() => buildNextDays(14, workingDays), [workingDays]);
 
   const goStep = (next: 1|2|3) => { setPrevStep(step); setStep(next); };
 
@@ -105,7 +107,7 @@ export function BookingFlow({
                       setServiceId(s.id);
                       setConfirmingSvc(s.id);
                       // micro-pausa visual antes de avanzar
-                      setTimeout(() => { setConfirmingSvc(null); goStep(2); }, 220);
+                      setTimeout(() => { setConfirmingSvc(null); goStep(2); }, 400);
                     }}
                     className={`text-left min-h-[60px] rounded-xl px-4 py-3 flex items-center justify-between border transition active:scale-[0.99]
                       ${sel || pulse ? 'bg-ink text-bg border-transparent' : 'bg-card border-line hover:border-ink/30'}`}>
@@ -308,7 +310,7 @@ export function BookingFlow({
           <div className="font-display text-[24px] leading-none">{money(total)}</div>
         </div>
         {step === 1 && (
-          <div className="text-[12px] text-muted">Tocá para continuar</div>
+          <div className="text-[12px] text-muted">{serviceId ? 'Avanzando…' : 'Elegí un servicio'}</div>
         )}
         {step === 2 && (
           <button type="button"
@@ -356,17 +358,20 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function buildNextDays(n: number) {
+function buildNextDays(n: number, workingDays?: number[]) {
   const out = [];
   const today = new Date(); today.setHours(0,0,0,0);
+  // Si no se pasa workingDays, asumimos que todos los días están abiertos (no bloqueamos nada)
+  const openDays: Set<number> | null = workingDays ? new Set(workingDays) : null;
   for (let i = 0; i < n; i++) {
     const d = new Date(today.getTime() + i * 86400000);
+    const dow = d.getDay();
     out.push({
       iso: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,
       day: d.getDate(),
       wd: d.toLocaleDateString('es-AR', { weekday: 'short' }).replace('.','').slice(0,3),
       label: i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : '',
-      closed: d.getDay() === 0
+      closed: openDays ? !openDays.has(dow) : false
     });
   }
   return out;

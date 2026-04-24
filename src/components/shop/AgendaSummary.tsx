@@ -8,12 +8,24 @@ type A = {
   barbers: { id: string; name: string; initials: string; hue: number };
 };
 
-export function AgendaSummary({ appointments, dayISO }: { appointments: A[]; dayISO: string }) {
+type SaleAmount = { amount: number };
+
+export function AgendaSummary({ appointments, sales, dayISO }: { appointments: A[]; sales?: SaleAmount[] | null; dayISO: string }) {
   const active = appointments.filter(a => a.status !== 'cancelled' && a.status !== 'no_show');
   const total = active.length;
-  const ingresos = active.reduce((s, a) => s + Number(a.services?.price || 0), 0);
   const first = active[0];
   const last = active[active.length - 1];
+
+  // Facturado hoy: sólo sales reales. Si `sales` no se pasa (undefined/null), mostramos "—".
+  const hasSales = Array.isArray(sales);
+  const billed = hasSales
+    ? (sales as SaleAmount[]).reduce((s, x) => s + Number(x.amount || 0), 0)
+    : 0;
+
+  // Agendado hoy (estimado): confirmed + in_progress — excluye completed (eso se contabiliza como facturado al cobrar).
+  const scheduledEstimated = active
+    .filter(a => a.status === 'confirmed' || a.status === 'in_progress' || a.status === 'pending')
+    .reduce((s, a) => s + Number(a.services?.price || 0), 0);
 
   // top barber
   const byBarber = new Map<string, { b: A['barbers']; count: number; revenue: number }>();
@@ -40,9 +52,21 @@ export function AgendaSummary({ appointments, dayISO }: { appointments: A[]; day
 
       <div className="flex-1 overflow-auto px-5 py-4 space-y-3">
         <div className="bg-dark-card border border-dark-line rounded-xl px-4 py-3.5">
-          <div className="font-mono text-[10px] tracking-[2px] text-dark-muted">FACTURACIÓN ESTIMADA</div>
-          <div className="font-display text-[36px] text-bg leading-none mt-1.5 -tracking-[1px]">{money(ingresos)}</div>
-          <div className="text-[11px] text-dark-muted mt-1.5">{total} {total === 1 ? 'turno' : 'turnos'} activos</div>
+          <div className="font-mono text-[10px] tracking-[2px] text-dark-muted">FACTURADO HOY</div>
+          <div className="font-display text-[32px] text-bg leading-none mt-1.5 -tracking-[1px]">
+            {hasSales ? money(billed) : '—'}
+          </div>
+          <div className="text-[11px] text-dark-muted mt-1.5">
+            {hasSales ? 'Sumado desde caja' : 'Cargá ventas en caja para ver el total'}
+          </div>
+
+          <div className="border-t border-dark-line/80 my-3"/>
+
+          <div className="font-mono text-[10px] tracking-[2px] text-dark-muted">AGENDADO HOY (ESTIMADO)</div>
+          <div className="font-display text-[22px] text-bg leading-none mt-1.5 -tracking-[0.5px]">{money(scheduledEstimated)}</div>
+          <div className="text-[11px] text-dark-muted mt-1.5">
+            {total} {total === 1 ? 'turno' : 'turnos'} activos (sin cobrar todavía)
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-2">

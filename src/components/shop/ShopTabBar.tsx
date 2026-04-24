@@ -4,11 +4,11 @@ import { usePathname } from 'next/navigation';
 import { Icon } from '@/components/shared/Icon';
 
 const tabs = [
-  { id: 'agenda', icon: 'calendar', label: 'Agenda',  href: '/shop' },
-  { id: 'caja',   icon: 'cash',     label: 'Caja',    href: '/shop/caja' },
-  { id: 'add',    icon: 'plus',     label: 'Nuevo',   href: '/shop/nuevo' },
-  { id: 'team',   icon: 'users',    label: 'Equipo',  href: '/shop/equipo' },
-  { id: 'more',   icon: 'settings', label: 'Ajustes', href: '/shop/ajustes' }
+  { id: 'agenda',    icon: 'calendar', label: 'Agenda',    href: '/shop' },
+  { id: 'dashboard', icon: 'star',     label: 'Stats',     href: '/shop/dashboard' },
+  { id: 'add',       icon: 'plus',     label: 'Nuevo',     href: '/shop/nuevo' },
+  { id: 'caja',      icon: 'cash',     label: 'Caja',      href: '/shop/caja' },
+  { id: 'more',      icon: 'settings', label: 'Ajustes',   href: '/shop/ajustes' }
 ] as const;
 
 export function ShopTabBar() {

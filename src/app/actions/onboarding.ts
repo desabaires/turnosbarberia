@@ -2,6 +2,7 @@
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { slugify } from '@/lib/slug';
 import { revalidatePath } from 'next/cache';
+import { sendNewShopNotificationToSuperAdmin } from '@/lib/email';
 
 const RESERVED_SLUGS = new Set(['s', 'shop', 'admin', 'api', 'auth', 'login', 'registro', 'onboarding']);
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$/;
@@ -214,6 +215,15 @@ export async function createShop(input: CreateShopInput): Promise<{ error?: stri
       return { error: 'No se pudieron crear los horarios: ' + schedErr.message };
     }
   }
+
+  // Aviso al super-admin (no bloqueante).
+  try {
+    await sendNewShopNotificationToSuperAdmin({
+      slug: shopRow.slug,
+      name: shopName,
+      ownerEmail: user.email || '(sin email)'
+    });
+  } catch { /* silencioso */ }
 
   revalidatePath('/shop');
   revalidatePath(`/s/${shopRow.slug}`);

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getShopBySlug } from '@/lib/shop-context';
 import { PRODUCT } from '@/lib/shop-info';
+import { MobileShell } from '@/components/shared/MobileShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,5 +25,5 @@ export default async function ShopSlugLayout({
   const shop = await getShopBySlug(params.slug);
   if (!shop) notFound();
   // Cookie `last_shop` gets written by middleware on every `/s/[slug]/*` hit.
-  return <>{children}</>;
+  return <MobileShell>{children}</MobileShell>;
 }

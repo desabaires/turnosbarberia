@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { RegisterForm } from '@/components/client/RegisterForm';
+import { MobileShell } from '@/components/shared/MobileShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -18,5 +19,5 @@ export default async function RegistroPage() {
     redirect('/onboarding');
   }
 
-  return <RegisterForm />;
+  return <MobileShell><RegisterForm /></MobileShell>;
 }

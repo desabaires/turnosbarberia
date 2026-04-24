@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { OnboardingWizard } from '@/components/client/OnboardingWizard';
+import { MobileShell } from '@/components/shared/MobileShell';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,5 +18,5 @@ export default async function OnboardingPage() {
 
   if (profile?.shop_id) redirect('/shop');
 
-  return <OnboardingWizard userName={profile?.name || ''} />;
+  return <MobileShell><OnboardingWizard userName={profile?.name || ''} /></MobileShell>;
 }

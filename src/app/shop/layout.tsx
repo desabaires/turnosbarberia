@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminShop } from '@/lib/shop-context';
+import { ShopSidebar } from '@/components/shop/ShopSidebar';
+import { ShopTabBar } from '@/components/shop/ShopTabBar';
 
 export default async function ShopLayout({ children }: { children: React.ReactNode }) {
   const supabase = createClient();
@@ -15,8 +17,18 @@ export default async function ShopLayout({ children }: { children: React.ReactNo
   if (!shop) redirect('/login?error=no_shop');
 
   return (
-    <div className="min-h-screen bg-dark text-bg">
-      {children}
+    <div className="min-h-screen bg-dark text-bg md:flex">
+      <aside className="hidden md:block md:w-64 lg:w-72 md:shrink-0 md:border-r md:border-dark-line md:sticky md:top-0 md:h-screen">
+        <ShopSidebar shop={{ name: shop.name, slug: shop.slug }}/>
+      </aside>
+      <div className="flex-1 min-w-0 flex flex-col min-h-screen">
+        <div className="flex-1 flex flex-col">
+          {children}
+        </div>
+        <div className="md:hidden">
+          <ShopTabBar/>
+        </div>
+      </div>
     </div>
   );
 }

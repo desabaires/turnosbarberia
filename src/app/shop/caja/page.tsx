@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminShop } from '@/lib/shop-context';
 import { ShopHeader, ShopTabs } from '@/components/shop/ShopHeader';
-import { ShopTabBar } from '@/components/shop/ShopTabBar';
 import { CashView } from '@/components/shop/CashView';
 
 export const dynamic = 'force-dynamic';
@@ -27,13 +26,12 @@ export default async function ShopCashPage() {
   ]);
 
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="flex-1 flex flex-col mx-auto w-full max-w-[440px] md:max-w-none md:mx-0">
       <ShopHeader subtitle="Caja del día"
         title={new Date().toLocaleDateString('es-AR', { weekday:'long', day:'numeric', month:'short' }).replace('.','')}
         action="more"/>
       <ShopTabs active="caja"/>
       <CashView sales={(sales as any) || []} products={products || []}/>
-      <ShopTabBar/>
     </main>
   );
 }

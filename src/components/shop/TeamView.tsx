@@ -34,7 +34,7 @@ export function TeamView({
   }
 
   return (
-    <div className="flex-1 overflow-auto px-5 pt-4 pb-5">
+    <div className="flex-1 overflow-auto px-5 pt-4 pb-5 md:px-8 md:grid md:grid-cols-2 md:gap-3 md:items-start xl:grid-cols-3">
       {barbers.map(b => {
         const barberAppts = weekAppts.filter(a => a.barber_id === b.id);
         const todayCount = barberAppts.filter(a => {

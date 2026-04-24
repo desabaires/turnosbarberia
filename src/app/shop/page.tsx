@@ -2,8 +2,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminShop } from '@/lib/shop-context';
 import { ShopHeader, ShopTabs } from '@/components/shop/ShopHeader';
-import { ShopTabBar } from '@/components/shop/ShopTabBar';
 import { AgendaView } from '@/components/shop/AgendaView';
+import { AgendaSummary } from '@/components/shop/AgendaSummary';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,13 +28,17 @@ export default async function ShopAgendaPage({ searchParams }: { searchParams: {
     supabase.from('barbers').select('*').eq('shop_id', shop.id).eq('is_active', true)
   ]);
 
+  const appointments = (appts as any) || [];
+
   return (
-    <main className="min-h-screen flex flex-col">
-      <ShopHeader subtitle="Dashboard" title={shop.name} action="search"/>
-      <ShopTabs active="agenda"/>
-      <AgendaView appointments={(appts as any) || []} barbers={barbers || []} dayISO={dayISO}/>
-      <ShopTabBar/>
-    </main>
+    <div className="flex-1 flex">
+      <main className="flex-1 flex flex-col min-w-0 mx-auto w-full max-w-[440px] md:max-w-none md:mx-0">
+        <ShopHeader subtitle="Dashboard" title={shop.name} action="search"/>
+        <ShopTabs active="agenda"/>
+        <AgendaView appointments={appointments} barbers={barbers || []} dayISO={dayISO}/>
+      </main>
+      <AgendaSummary appointments={appointments} dayISO={dayISO}/>
+    </div>
   );
 }
 

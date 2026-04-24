@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { Icon } from '@/components/shared/Icon';
 import { Stripe } from '@/components/shared/Stripe';
+import { MobileShell } from '@/components/shared/MobileShell';
 
 export default function NotFound() {
   return (
+    <MobileShell>
     <main className="min-h-screen flex flex-col px-6 pt-10 pb-10">
       <div className="flex-1 flex flex-col items-center justify-center text-center">
         <div className="font-mono text-[10px] tracking-[3px] text-muted mb-3">ERROR · 404</div>
@@ -29,5 +31,6 @@ export default function NotFound() {
         </div>
       </div>
     </main>
+    </MobileShell>
   );
 }

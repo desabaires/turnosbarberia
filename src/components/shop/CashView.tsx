@@ -10,22 +10,22 @@ export function CashView({ sales, products }: { sales: Sale[]; products: Product
   const totProd = sales.filter(s => s.type === 'product').reduce((a, x) => a + Number(x.amount), 0);
 
   return (
-    <div className="flex-1 overflow-auto px-5 pt-4 pb-5">
+    <div className="flex-1 overflow-auto px-5 pt-4 pb-5 md:px-8">
       {/* Big total */}
-      <div className="bg-bg text-ink rounded-2xl px-5 py-4 relative overflow-hidden">
+      <div className="bg-bg text-ink rounded-2xl px-5 py-4 relative overflow-hidden md:px-7 md:py-6">
         <Stripe className="absolute top-0 left-0 right-0"/>
         <div className="font-mono text-[10px] tracking-[2px] text-muted mt-2">TOTAL DÍA</div>
-        <div className="font-display text-[48px] leading-none mt-1.5 -tracking-[1px]">{money(total)}</div>
-        <div className="flex gap-2.5 mt-3.5">
+        <div className="font-display text-[48px] leading-none mt-1.5 -tracking-[1px] md:text-[64px]">{money(total)}</div>
+        <div className="flex gap-2.5 mt-3.5 md:max-w-md">
           <Tile l="Servicios" v={money(totServ)}/>
           <Tile l="Productos" v={money(totProd)}/>
         </div>
       </div>
 
-      <div className="flex gap-2 mt-3.5">
+      <div className="flex gap-2 mt-3.5 md:max-w-xl">
         <button
           type="button"
-          className="flex-1 min-h-[48px] bg-dark-card text-bg border border-dark-line px-3 py-3 rounded-l text-[13px] font-medium flex items-center justify-center gap-1.5 active:scale-[0.98] transition"
+          className="flex-1 min-h-[48px] bg-dark-card text-bg border border-dark-line px-3 py-3 rounded-l text-[13px] font-medium flex items-center justify-center gap-1.5 active:scale-[0.98] transition hover:border-bg/30"
         >
           <Icon name="bag" size={16}/> Vender producto
         </button>
@@ -46,25 +46,65 @@ export function CashView({ sales, products }: { sales: Sale[]; products: Product
           description="Cuando cobres un servicio o vendas un producto, va a aparecer acá."
         />
       ) : (
-        <div className="bg-dark-card border border-dark-line rounded-xl overflow-hidden">
-          {sales.map((s, i) => (
-            <div key={s.id} className={`flex items-center gap-3 px-3.5 py-3 ${i < sales.length - 1 ? 'border-b border-dark-line' : ''}`}>
-              <div className="w-[30px] h-[30px] rounded-s bg-dark grid place-items-center text-bg">
-                <Icon name={s.type === 'product' ? 'bag' : 'scissors'} size={14}/>
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="text-[13px] font-medium text-bg truncate">
-                  {s.type === 'product' ? products.find(p => p.id === s.product_id)?.name || 'Producto' : 'Servicio'}
+        <>
+          {/* Mobile cards */}
+          <div className="bg-dark-card border border-dark-line rounded-xl overflow-hidden md:hidden">
+            {sales.map((s, i) => (
+              <div key={s.id} className={`flex items-center gap-3 px-3.5 py-3 ${i < sales.length - 1 ? 'border-b border-dark-line' : ''}`}>
+                <div className="w-[30px] h-[30px] rounded-s bg-dark grid place-items-center text-bg">
+                  <Icon name={s.type === 'product' ? 'bag' : 'scissors'} size={14}/>
                 </div>
-                <div className="text-[11px] text-dark-muted mt-0.5 truncate">
-                  {new Date(s.created_at).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false })}
-                  {s.customer_name ? ` · ${s.customer_name}` : ''} · {labelMethod(s.payment_method)}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium text-bg truncate">
+                    {s.type === 'product' ? products.find(p => p.id === s.product_id)?.name || 'Producto' : 'Servicio'}
+                  </div>
+                  <div className="text-[11px] text-dark-muted mt-0.5 truncate">
+                    {new Date(s.created_at).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false })}
+                    {s.customer_name ? ` · ${s.customer_name}` : ''} · {labelMethod(s.payment_method)}
+                  </div>
                 </div>
+                <div className="font-mono text-[13px] font-semibold text-bg">{money(Number(s.amount))}</div>
               </div>
-              <div className="font-mono text-[13px] font-semibold text-bg">{money(Number(s.amount))}</div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden md:block bg-dark-card border border-dark-line rounded-xl overflow-hidden">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-dark-line bg-dark/40">
+                  <th className="font-mono text-[10px] tracking-[2px] text-dark-muted font-normal px-4 py-3">HORA</th>
+                  <th className="font-mono text-[10px] tracking-[2px] text-dark-muted font-normal px-4 py-3">TIPO</th>
+                  <th className="font-mono text-[10px] tracking-[2px] text-dark-muted font-normal px-4 py-3">DESCRIPCIÓN</th>
+                  <th className="font-mono text-[10px] tracking-[2px] text-dark-muted font-normal px-4 py-3">CLIENTE</th>
+                  <th className="font-mono text-[10px] tracking-[2px] text-dark-muted font-normal px-4 py-3">MÉTODO</th>
+                  <th className="font-mono text-[10px] tracking-[2px] text-dark-muted font-normal px-4 py-3 text-right">MONTO</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sales.map((s, i) => (
+                  <tr key={s.id} className={`${i < sales.length - 1 ? 'border-b border-dark-line' : ''} hover:bg-dark/30 transition`}>
+                    <td className="px-4 py-3 font-mono text-[12px] text-bg whitespace-nowrap">
+                      {new Date(s.created_at).toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit', hour12:false })}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="inline-flex items-center gap-1.5 text-[12px] text-bg">
+                        <Icon name={s.type === 'product' ? 'bag' : 'scissors'} size={14}/>
+                        {s.type === 'product' ? 'Producto' : 'Servicio'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-[13px] text-bg">
+                      {s.type === 'product' ? products.find(p => p.id === s.product_id)?.name || 'Producto' : 'Servicio'}
+                    </td>
+                    <td className="px-4 py-3 text-[12px] text-dark-muted">{s.customer_name || '—'}</td>
+                    <td className="px-4 py-3 text-[12px] text-dark-muted">{labelMethod(s.payment_method)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-[13px] font-semibold text-bg whitespace-nowrap">{money(Number(s.amount))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       <SectionLabel className="mt-6">STOCK · PRODUCTOS</SectionLabel>
@@ -76,7 +116,7 @@ export function CashView({ sales, products }: { sales: Sale[]; products: Product
           description="Agregá productos desde Ajustes para empezar a venderlos desde la caja."
         />
       ) : (
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3 xl:grid-cols-5">
           {products.map(p => {
             const low = p.stock < 10;
             return (

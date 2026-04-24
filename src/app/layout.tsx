@@ -21,7 +21,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es-AR">
       <body>
-        <div className="mx-auto min-h-screen max-w-[440px] bg-bg">
+        <div className="min-h-screen bg-bg">
           {children}
         </div>
       </body>

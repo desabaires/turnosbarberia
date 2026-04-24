@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminShop } from '@/lib/shop-context';
 import { ShopHeader, ShopTabs } from '@/components/shop/ShopHeader';
-import { ShopTabBar } from '@/components/shop/ShopTabBar';
 import { TeamView } from '@/components/shop/TeamView';
 
 export const dynamic = 'force-dynamic';
@@ -34,7 +33,7 @@ export default async function ShopTeamPage() {
   ]);
 
   return (
-    <main className="min-h-screen flex flex-col">
+    <main className="flex-1 flex flex-col mx-auto w-full max-w-[440px] md:max-w-none md:mx-0">
       <ShopHeader subtitle="Equipo"
         title={`Semana del ${startOfWeek.getDate()} ${startOfWeek.toLocaleDateString('es-AR', { month:'short' }).replace('.','')}`}
         action="plus"/>
@@ -47,7 +46,6 @@ export default async function ShopTeamPage() {
         todayISO={today.toISOString()}
         tomorrowISO={tomorrow.toISOString()}
       />
-      <ShopTabBar/>
     </main>
   );
 }

@@ -48,14 +48,14 @@ export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Stats */}
-      <div className="px-5 pt-3.5 grid grid-cols-3 gap-2">
+      <div className="px-5 pt-3.5 grid grid-cols-3 gap-2 md:px-8 md:gap-3">
         <Stat k="Hoy"      v={`${total}`} s="turnos"/>
         <Stat k="Hechos"   v={`${done}`}  s={`de ${total}`}/>
         <Stat k="Ingresos" v={shortMoney(ingresos)} s="estimado"/>
       </div>
 
       {/* Day picker */}
-      <div ref={dayPickerRef} className="px-5 pt-3.5 pb-2.5 flex gap-1.5 overflow-x-auto no-scrollbar -mx-0">
+      <div ref={dayPickerRef} className="px-5 pt-3.5 pb-2.5 flex gap-1.5 overflow-x-auto no-scrollbar md:px-8 md:gap-2">
         {days.map(d => {
           const sel = d.iso === dayISO;
           return (
@@ -63,7 +63,7 @@ export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[
               data-day={d.iso}
               aria-pressed={sel}
               aria-label={`Ver agenda del ${d.wd} ${d.day}${d.closed ? ' (cerrado)' : ''}`}
-              className={`min-w-[52px] min-h-[48px] py-2 rounded-m text-center transition active:scale-[0.97]
+              className={`min-w-[52px] md:min-w-[64px] min-h-[48px] py-2 rounded-m text-center transition active:scale-[0.97]
                 ${sel ? 'bg-bg text-ink border-0' :
                   d.closed ? 'border border-dashed border-dark-line text-dark-muted opacity-60' :
                   'border border-dark-line text-bg hover:border-bg/40'}`}>
@@ -75,7 +75,7 @@ export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[
       </div>
 
       {/* Timeline */}
-      <div className="flex-1 overflow-auto px-5 pt-1 pb-5">
+      <div className="flex-1 overflow-auto px-5 pt-1 pb-5 md:px-8">
         <div className="flex items-center gap-2 my-3">
           <div className="font-mono text-[10px] tracking-[2px] text-dark-muted flex-1">
             {new Date(dayISO + 'T00:00:00').toLocaleDateString('es-AR', { weekday:'long', day:'numeric' }).toUpperCase()} · TODOS LOS BARBEROS
@@ -101,7 +101,7 @@ export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[
             ctaHref="/shop/nuevo"
           />
         ) : (
-          <>
+          <div className="md:grid md:grid-cols-2 md:gap-x-3 xl:grid-cols-3">
             {appointments.map((a) => {
               const startMs = new Date(a.starts_at).getTime();
               const endMs = new Date(a.ends_at).getTime();
@@ -118,7 +118,7 @@ export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[
               return (
                 <Fragment key={a.id}>
                   {showNowBefore && (
-                    <div className="flex items-center gap-2.5 my-2" aria-hidden="true">
+                    <div className="flex items-center gap-2.5 my-2 md:col-span-full" aria-hidden="true">
                       <div className="font-mono text-[10px] text-accent tracking-[2px] font-semibold">
                         AHORA · {nowTimeLabel}
                       </div>
@@ -170,7 +170,7 @@ export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[
 
             {/* Si todos los turnos ya pasaron, mostrar el indicador "AHORA" al final */}
             {isToday && !nowInserted && (
-              <div className="flex items-center gap-2.5 my-2" aria-hidden="true">
+              <div className="flex items-center gap-2.5 my-2 md:col-span-full" aria-hidden="true">
                 <div className="font-mono text-[10px] text-accent tracking-[2px] font-semibold">
                   AHORA · {nowTimeLabel}
                 </div>
@@ -178,7 +178,7 @@ export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[
                 <div className="w-1.5 h-1.5 rounded-full bg-accent" />
               </div>
             )}
-          </>
+          </div>
         )}
       </div>
     </div>

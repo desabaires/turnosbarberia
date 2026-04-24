@@ -4,6 +4,10 @@ import { getShopBySlug } from '@/lib/shop-context';
 
 export const dynamic = 'force-dynamic';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$/;
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const shopSlug = searchParams.get('shopSlug');
@@ -11,8 +15,24 @@ export async function GET(request: Request) {
   const barberId = searchParams.get('barberId');
   const serviceId = searchParams.get('serviceId');
   const date = searchParams.get('date');
+
   if (!barberId || !serviceId || !date || (!shopSlug && !shopIdParam)) {
     return NextResponse.json({ error: 'missing params' }, { status: 400 });
+  }
+  if (!DATE_RE.test(date)) {
+    return NextResponse.json({ error: 'bad date' }, { status: 400 });
+  }
+  if (!UUID_RE.test(serviceId)) {
+    return NextResponse.json({ error: 'bad serviceId' }, { status: 400 });
+  }
+  if (barberId !== 'any' && !UUID_RE.test(barberId)) {
+    return NextResponse.json({ error: 'bad barberId' }, { status: 400 });
+  }
+  if (shopIdParam && !UUID_RE.test(shopIdParam)) {
+    return NextResponse.json({ error: 'bad shopId' }, { status: 400 });
+  }
+  if (shopSlug && !SLUG_RE.test(shopSlug)) {
+    return NextResponse.json({ error: 'bad shopSlug' }, { status: 400 });
   }
 
   let shopId: string | null = shopIdParam;

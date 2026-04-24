@@ -13,10 +13,13 @@ export async function middleware(request: NextRequest) {
   }
 
   // Track last-visited shop for the root redirect.
+  // Solo seteamos si el slug matchea el shape esperado (evita que un path
+  // con caracteres raros quede pegado como cookie forever).
   const match = request.nextUrl.pathname.match(/^\/s\/([^/]+)(?:\/|$)/);
   if (match) {
     const slug = match[1];
-    if (request.cookies.get(LAST_SHOP_COOKIE)?.value !== slug) {
+    const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$/;
+    if (SLUG_RE.test(slug) && request.cookies.get(LAST_SHOP_COOKIE)?.value !== slug) {
       response.cookies.set(LAST_SHOP_COOKIE, slug, {
         path: '/',
         maxAge: 60 * 60 * 24 * 365,

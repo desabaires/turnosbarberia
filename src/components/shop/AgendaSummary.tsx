@@ -79,7 +79,7 @@ export function AgendaSummary({ appointments, dayISO }: { appointments: A[]; day
       <div className="px-5 py-4 border-t border-dark-line">
         <div className="flex items-center gap-1.5 text-[11px] text-dark-muted">
           <Icon name="clock" size={12} color="#8C8A83"/>
-          Actualizado en tiempo real
+          Resumen del día
         </div>
       </div>
     </aside>

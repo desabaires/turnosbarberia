@@ -65,6 +65,8 @@ function initialsFrom(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
+const NAME_LINE_RE = /^[\p{L}\p{N}\s'.,&·()-]{2,80}$/u;
+
 export async function createShop(input: CreateShopInput): Promise<{ error?: string }> {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -72,23 +74,35 @@ export async function createShop(input: CreateShopInput): Promise<{ error?: stri
 
   const shopName = (input.shop?.name || '').trim();
   const shopSlug = (input.shop?.slug || '').trim().toLowerCase();
-  if (shopName.length < 2) return { error: 'El nombre de la barbería es muy corto' };
+  if (!NAME_LINE_RE.test(shopName)) {
+    return { error: 'El nombre de la barbería es inválido o muy largo' };
+  }
 
   const shape = validateSlugShape(shopSlug);
   if (!shape.ok) return { error: `Slug inválido: ${shape.reason}` };
 
+  const shopAddress = (input.shop?.address || '').trim().slice(0, 160);
+  const shopPhone = (input.shop?.phone || '').trim().slice(0, 30);
+
   const services = (input.services || []).map(s => ({
-    name: (s.name || '').trim(),
-    duration_mins: Number(s.duration_mins) || 0,
-    price: Number(s.price) || 0
-  })).filter(s => s.name.length > 0 && s.duration_mins > 0);
-  if (services.length === 0) return { error: 'Agregá al menos un servicio' };
+    name: (s.name || '').trim().slice(0, 80),
+    duration_mins: Math.floor(Number(s.duration_mins) || 0),
+    price: Math.max(0, Number(s.price) || 0)
+  })).filter(s =>
+    NAME_LINE_RE.test(s.name)
+    && s.duration_mins >= 5
+    && s.duration_mins <= 480
+    && s.price <= 10_000_000
+  );
+  if (services.length === 0) return { error: 'Agregá al menos un servicio válido' };
+  if (services.length > 30) return { error: 'Máximo 30 servicios por barbería' };
 
   const barbers = (input.barbers || []).map(b => ({
-    name: (b.name || '').trim(),
-    role: b.role?.trim() || null
-  })).filter(b => b.name.length > 0);
+    name: (b.name || '').trim().slice(0, 60),
+    role: (b.role || '').trim().slice(0, 60) || null
+  })).filter(b => NAME_LINE_RE.test(b.name));
   if (barbers.length === 0) return { error: 'Agregá al menos un barbero' };
+  if (barbers.length > 50) return { error: 'Máximo 50 barberos por barbería' };
 
   const perBarber = !!input.schedules?.perBarber;
   const generalSched = (input.schedules?.general || []) as DaySchedule[];
@@ -111,10 +125,10 @@ export async function createShop(input: CreateShopInput): Promise<{ error?: stri
     .insert({
       name: shopName,
       slug: shopSlug,
-      address: input.shop.address?.trim() || null,
-      phone: input.shop.phone?.trim() || null,
+      address: shopAddress || null,
+      phone: shopPhone || null,
       owner_id: user.id,
-      is_active: true
+      is_active: false
     })
     .select('id, slug')
     .single();

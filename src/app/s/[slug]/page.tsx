@@ -48,14 +48,6 @@ export default async function ShopHomePage({ params }: { params: { slug: string 
           <div className="text-xs text-muted">Hola,</div>
           <div className="text-xl font-semibold -tracking-[0.3px]">{greetingName}</div>
         </div>
-        <button
-          type="button"
-          aria-label="Notificaciones"
-          className="relative grid place-items-center w-10 h-10 rounded-full bg-card border border-line active:scale-95 transition"
-        >
-          <Icon name="bell" size={18}/>
-          <span className="absolute top-2 right-[9px] w-2 h-2 rounded-full bg-accent border-2 border-card" />
-        </button>
       </header>
 
       <div className="flex-1 overflow-auto px-5 pb-6">

@@ -7,7 +7,7 @@ import { signupOwner } from '@/app/actions/auth';
 export function RegisterForm() {
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok?: boolean; text: string } | null>(null);
-  const [accept, setAccept] = useState(true);
+  const [accept, setAccept] = useState(false);
 
   return (
     <main className="min-h-screen bg-ink text-bg relative overflow-hidden">

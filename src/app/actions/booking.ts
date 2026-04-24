@@ -1,18 +1,27 @@
 'use server';
 import { z } from 'zod';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { getShopBySlug } from '@/lib/shop-context';
+import {
+  RECENT_BOOKINGS_COOKIE,
+  RECENT_BOOKINGS_MAX_AGE,
+  appendRecentBooking
+} from '@/lib/booking-cookie';
+
+const NAME_RE  = /^[\p{L}\s'.-]{2,80}$/u;
+const PHONE_RE = /^[+\d\s()-]{6,30}$/;
 
 const BookingSchema = z.object({
-  shopSlug:  z.string().min(1),
-  serviceId: z.string().uuid(),
-  barberId:  z.string().uuid().or(z.literal('any')),
-  startsAt:  z.string().datetime(),
-  customerName:  z.string().min(2),
-  customerPhone: z.string().min(6),
-  customerEmail: z.string().email()
+  shopSlug:      z.string().min(1).max(50),
+  serviceId:     z.string().uuid(),
+  barberId:      z.string().uuid().or(z.literal('any')),
+  startsAt:      z.string().datetime(),
+  customerName:  z.string().trim().regex(NAME_RE, 'Nombre inválido'),
+  customerPhone: z.string().trim().regex(PHONE_RE, 'Teléfono inválido'),
+  customerEmail: z.string().trim().email().max(120)
 });
 
 export async function createBooking(input: z.infer<typeof BookingSchema>) {
@@ -25,25 +34,38 @@ export async function createBooking(input: z.infer<typeof BookingSchema>) {
   const shop = await getShopBySlug(data.shopSlug);
   if (!shop) return { error: 'La barbería no está disponible.' };
 
-  // Use admin client to bypass RLS for guest bookings (still validated above)
+  // Validar rango razonable de fecha de inicio (no pasado, no más de 180 días futuro).
+  const startsAt = new Date(data.startsAt);
+  const now = new Date();
+  const maxFuture = new Date(now.getTime() + 180 * 24 * 60 * 60_000);
+  if (!(startsAt instanceof Date) || isNaN(startsAt.getTime())) {
+    return { error: 'Fecha inválida.' };
+  }
+  if (startsAt.getTime() < now.getTime() - 60_000) {
+    return { error: 'La fecha es pasada.' };
+  }
+  if (startsAt.getTime() > maxFuture.getTime()) {
+    return { error: 'La fecha es demasiado lejana.' };
+  }
+
   const admin = createAdminClient();
-  const { data: service, error: svcErr } = await admin
+  const { data: service } = await admin
     .from('services')
     .select('id, duration_mins, is_active, shop_id')
     .eq('id', data.serviceId)
     .eq('shop_id', shop.id)
-    .single();
-  if (svcErr || !service || !service.is_active) {
+    .eq('is_active', true)
+    .maybeSingle();
+  if (!service) {
     return { error: 'Ese servicio ya no está disponible.' };
   }
 
   let barberId = data.barberId;
+  const endsAt = new Date(startsAt.getTime() + service.duration_mins * 60_000);
+
   if (barberId === 'any') {
-    // Pick first active barber of this shop that doesn't have a conflict at that time
     const { data: barbers } = await admin
       .from('barbers').select('id').eq('shop_id', shop.id).eq('is_active', true);
-    const startsAt = new Date(data.startsAt);
-    const endsAt = new Date(startsAt.getTime() + service.duration_mins * 60_000);
     for (const b of barbers || []) {
       const { data: conflicts } = await admin
         .from('appointments')
@@ -58,16 +80,33 @@ export async function createBooking(input: z.infer<typeof BookingSchema>) {
     }
     if (barberId === 'any') return { error: 'No hay barberos libres en ese horario. Probá con otro.' };
   } else {
-    // Validate barber belongs to this shop
     const { data: barber } = await admin
-      .from('barbers').select('id').eq('id', barberId).eq('shop_id', shop.id).maybeSingle();
+      .from('barbers').select('id').eq('id', barberId).eq('shop_id', shop.id).eq('is_active', true).maybeSingle();
     if (!barber) return { error: 'Ese barbero no pertenece a esta barbería.' };
   }
 
-  const startsAt = new Date(data.startsAt);
-  const endsAt = new Date(startsAt.getTime() + service.duration_mins * 60_000);
+  // Validar que el horario caiga dentro del schedule del barbero para ese día.
+  const dayOfWeek = startsAt.getDay();
+  const { data: schedule } = await admin
+    .from('schedules')
+    .select('start_time, end_time, is_working')
+    .eq('shop_id', shop.id)
+    .eq('barber_id', barberId)
+    .eq('day_of_week', dayOfWeek)
+    .maybeSingle();
+  if (!schedule || !schedule.is_working) {
+    return { error: 'El barbero no trabaja ese día.' };
+  }
+  const hh = String(startsAt.getHours()).padStart(2, '0');
+  const mm = String(startsAt.getMinutes()).padStart(2, '0');
+  const slotStart = `${hh}:${mm}`;
+  const endHh = String(endsAt.getHours()).padStart(2, '0');
+  const endMm = String(endsAt.getMinutes()).padStart(2, '0');
+  const slotEnd = `${endHh}:${endMm}`;
+  if (slotStart < schedule.start_time || slotEnd > schedule.end_time) {
+    return { error: 'Ese horario está fuera del horario del barbero.' };
+  }
 
-  // Get current user (if authenticated) to link the booking
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
@@ -94,6 +133,17 @@ export async function createBooking(input: z.infer<typeof BookingSchema>) {
     }
     return { error: insErr.message };
   }
+
+  // Whitelist cookie para que invitados puedan ver la página de confirmación.
+  const cookieStore = cookies();
+  const existing = cookieStore.get(RECENT_BOOKINGS_COOKIE)?.value;
+  cookieStore.set(RECENT_BOOKINGS_COOKIE, appendRecentBooking(existing, appointment!.id), {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: RECENT_BOOKINGS_MAX_AGE
+  });
 
   revalidatePath(`/s/${data.shopSlug}`);
   revalidatePath(`/s/${data.shopSlug}/mis-turnos`);
@@ -124,13 +174,24 @@ export async function cancelAppointment(id: string) {
   return { ok: true };
 }
 
-export async function setAppointmentStatus(id: string, status: 'confirmed'|'in_progress'|'completed'|'cancelled'|'no_show') {
+export async function setAppointmentStatus(
+  id: string,
+  status: 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show'
+) {
   const supabase = createClient();
-  const { data: profile } = await supabase
-    .from('profiles').select('is_admin').eq('id', (await supabase.auth.getUser()).data.user?.id || '').maybeSingle();
-  if (!profile?.is_admin) return { error: 'Solo admins' };
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'No autenticado' };
 
-  const { error } = await supabase.from('appointments').update({ status }).eq('id', id);
+  // Defense-in-depth: también validamos en el action, no solo en RLS.
+  const { data: profile } = await supabase
+    .from('profiles').select('is_admin, shop_id').eq('id', user.id).maybeSingle<{ is_admin: boolean; shop_id: string | null }>();
+  if (!profile?.is_admin || !profile.shop_id) return { error: 'Solo admins' };
+
+  const { error } = await supabase
+    .from('appointments')
+    .update({ status })
+    .eq('id', id)
+    .eq('shop_id', profile.shop_id);
   if (error) return { error: error.message };
   revalidatePath('/shop');
   return { ok: true };

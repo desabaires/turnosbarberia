@@ -140,7 +140,7 @@ export function AgendaView({ appointments, barbers, dayISO }: { appointments: A[
                         if ((r as any)?.error) setError((r as any).error);
                       })}
                       disabled={pending}
-                      aria-label={`Turno ${a.customer_name} a las ${time}. Tocá para cambiar estado.`}
+                      aria-label={`Turno ${a.customer_name} a las ${time}. ${isDone ? 'Marcar como confirmado' : isInProgress ? 'Marcar como completado' : 'Iniciar (en curso)'}.`}
                       className={`flex-1 min-h-[56px] rounded-l px-3.5 py-3 flex items-center gap-2.5 text-left transition active:scale-[0.99]
                         ${isInProgress ? 'text-white border-0 bg-accent' :
                           isNext ? 'bg-bg text-ink border-0' :

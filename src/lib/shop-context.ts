@@ -29,7 +29,11 @@ export async function getAdminShop(): Promise<Shop | null> {
 
   if (!profile?.is_admin || !profile.shop_id) return null;
 
-  const { data: shop } = await sb
+  // Usamos admin client porque un shop inactivo (pendiente de aprobación)
+  // aún debe ser visible para su owner, pero la policy pública solo devuelve
+  // activos.
+  const admin = createAdminClient();
+  const { data: shop } = await admin
     .from('shops')
     .select('*')
     .eq('id', profile.shop_id)

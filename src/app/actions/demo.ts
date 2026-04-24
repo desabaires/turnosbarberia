@@ -1,4 +1,6 @@
 'use server';
+import { randomBytes } from 'node:crypto';
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createClient, createAdminClient } from '@/lib/supabase/server';
@@ -6,27 +8,52 @@ import { DEMO, DEMO_NOTE, DEMO_SALE_TAG } from '@/lib/demo';
 
 type Role = 'cliente' | 'dueno';
 
+const DEMO_COOLDOWN_COOKIE = 'demo_cd';
+const DEMO_COOLDOWN_SECS = 8;
+
+function randomPassword(): string {
+  return randomBytes(18).toString('base64url');
+}
+
 export async function enterDemo(role: Role) {
+  // Throttle: evita spam de enterDemo (que reinicia password y data).
+  const cookieStore = cookies();
+  const cd = cookieStore.get(DEMO_COOLDOWN_COOKIE)?.value;
+  if (cd) {
+    const ts = parseInt(cd, 10);
+    if (Number.isFinite(ts) && Date.now() - ts < DEMO_COOLDOWN_SECS * 1000) {
+      return { error: 'Esperá unos segundos entre intentos.' };
+    }
+  }
+  cookieStore.set(DEMO_COOLDOWN_COOKIE, String(Date.now()), {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 60
+  });
+
   const account = DEMO[role];
   const admin = createAdminClient();
 
-  // 0. Fetch demo shop (we need its id to stamp profile and appointments)
   const { data: demoShop } = await admin
     .from('shops').select('id, slug').eq('slug', 'demo').maybeSingle<{ id: string; slug: string }>();
   if (!demoShop) return { error: 'Falta el shop demo. Aplicá el seed inicial.' };
 
-  // 1. Ensure user exists
+  // Password random en cada login → el atacante no puede loguearse offline
+  // con la misma pass.
+  const sessionPassword = randomPassword();
+
   let userId: string | null = null;
   const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
   const existing = list?.users.find((u: any) => u.email === account.email);
   if (existing) {
     userId = existing.id;
-    // Make sure password matches our known one (in case it was changed)
-    await admin.auth.admin.updateUserById(existing.id, { password: account.password, email_confirm: true });
+    await admin.auth.admin.updateUserById(existing.id, { password: sessionPassword, email_confirm: true });
   } else {
     const { data, error } = await admin.auth.admin.createUser({
       email: account.email,
-      password: account.password,
+      password: sessionPassword,
       email_confirm: true,
       user_metadata: { name: account.name, phone: account.phone }
     });
@@ -34,7 +61,6 @@ export async function enterDemo(role: Role) {
     userId = data.user.id;
   }
 
-  // 2. Upsert profile (set is_admin for dueño, and associate with demo shop)
   await admin.from('profiles').upsert({
     id: userId!,
     name: account.name,
@@ -44,15 +70,13 @@ export async function enterDemo(role: Role) {
     shop_id: demoShop.id
   });
 
-  // 3. Refresh demo data if needed
   const seedErr = await ensureDemoData(demoShop.id);
   if (seedErr) return { error: seedErr };
 
-  // 4. Sign in (cookies set by createClient)
   const supabase = createClient();
   const { error } = await supabase.auth.signInWithPassword({
     email: account.email,
-    password: account.password
+    password: sessionPassword
   });
   if (error) return { error: 'No se pudo iniciar sesión demo: ' + error.message };
 

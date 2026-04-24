@@ -1,11 +1,13 @@
 import Link from 'next/link';
+import { cookies } from 'next/headers';
 import { notFound } from 'next/navigation';
-import { createAdminClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { getShopBySlug } from '@/lib/shop-context';
 import { Icon } from '@/components/shared/Icon';
 import { Stripe } from '@/components/shared/Stripe';
 import { ConfirmationActions } from '@/components/client/ConfirmationActions';
 import { money } from '@/lib/format';
+import { RECENT_BOOKINGS_COOKIE } from '@/lib/booking-cookie';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,13 +15,41 @@ export default async function ConfirmationPage({ params }: { params: { slug: str
   const shop = await getShopBySlug(params.slug);
   if (!shop) notFound();
 
-  const sb = createAdminClient();
-  const { data: appt } = await sb
+  // Authorization chain:
+  // 1. User logueado cuyo profile_id === appointment.profile_id (RLS lo permite).
+  // 2. Browser cookie `recent_bookings` contiene este ID (invitado que reservó).
+  // 3. Admin del shop (ve todas).
+  // Si ninguno, 404.
+  const userClient = createClient();
+  const { data: { user } } = await userClient.auth.getUser();
+
+  let appt: any = null;
+  const baseSelect = 'id, starts_at, ends_at, customer_name, services(name, duration_mins, price), barbers(name)';
+
+  // Trip 1: via RLS (user logueado)
+  const { data: viaRls } = await userClient
     .from('appointments')
-    .select('id, starts_at, ends_at, customer_name, services(name, duration_mins, price), barbers(name)')
+    .select(baseSelect)
     .eq('id', params.id)
     .eq('shop_id', shop.id)
     .maybeSingle();
+  if (viaRls) {
+    appt = viaRls;
+  } else {
+    // Trip 2: cookie whitelist (invitado o user sin profile_id match)
+    const recentRaw = cookies().get(RECENT_BOOKINGS_COOKIE)?.value;
+    const recentList = (recentRaw || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (recentList.includes(params.id)) {
+      const admin = createAdminClient();
+      const { data: viaCookie } = await admin
+        .from('appointments')
+        .select(baseSelect)
+        .eq('id', params.id)
+        .eq('shop_id', shop.id)
+        .maybeSingle();
+      if (viaCookie) appt = viaCookie;
+    }
+  }
 
   if (!appt) return notFound();
   const a = appt as any;
@@ -51,7 +81,7 @@ export default async function ConfirmationPage({ params }: { params: { slug: str
         </div>
         <h1 className="fade-in-up font-display text-[34px] leading-tight mt-5 -tracking-[0.5px]">Turno confirmado</h1>
         <p className="fade-in-up text-[13px] text-muted mt-2 max-w-[280px] mx-auto" style={{ animationDelay: '60ms' }}>
-          Te llegó un email con los detalles. Cancelación gratuita hasta 2 hs antes.
+          Guardá este ticket. Cancelación gratuita hasta 2 hs antes.
         </p>
       </div>
 

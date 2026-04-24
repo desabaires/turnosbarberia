@@ -41,7 +41,13 @@ function Navbar() {
             <Icon name="arrow-right" size={14} />
           </Link>
         </nav>
-        <div className="md:hidden">
+        <div className="md:hidden flex items-center gap-2">
+          <Link
+            href="/login"
+            className="text-sm hover:text-ink/70 transition-colors"
+          >
+            Entrar
+          </Link>
           <Link
             href="/login"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-ink text-bg text-sm"

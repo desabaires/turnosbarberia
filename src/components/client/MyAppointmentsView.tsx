@@ -55,11 +55,14 @@ export function MyAppointmentsView({ slug, upcoming, history }: { slug: string; 
                 ctaHref={reservar()}
               />
             ) : (
-              <FeaturedCard a={featured} reservarHref={reservar((featured as any).service_id || '')} pending={pending} onCancel={(id) => start(async () => {
-                setError(null);
-                const r = await cancelAppointment(id);
-                if (r?.error) setError(r.error);
-              })}/>
+              <FeaturedCard a={featured} reservarHref={reservar((featured as any).service_id || '')} pending={pending} onCancel={(id) => {
+                if (!confirm('¿Cancelar este turno? No se puede deshacer.')) return;
+                start(async () => {
+                  setError(null);
+                  const r = await cancelAppointment(id);
+                  if (r?.error) setError(r.error);
+                });
+              }}/>
             )}
             {error && (
               <div className="mt-3">

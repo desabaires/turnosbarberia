@@ -69,8 +69,14 @@ export async function enterDemo(role: Role) {
     shop_id: demoShop.id
   });
 
-  const seedErr = await ensureDemoData(demoShop.id);
-  if (seedErr) return { error: seedErr };
+  // ensureDemoData es best-effort: si falla (ej. race condition en seed)
+  // NO bloqueamos el login demo. El user entra con la data que haya.
+  try {
+    const seedErr = await ensureDemoData(demoShop.id);
+    if (seedErr) console.error('[demo] ensureDemoData warning:', seedErr);
+  } catch (e: any) {
+    console.error('[demo] ensureDemoData threw:', e?.message);
+  }
 
   const supabase = createClient();
   const { error } = await supabase.auth.signInWithPassword({
@@ -224,13 +230,21 @@ async function ensureDemoData(shopId: string): Promise<string | null> {
     }
   }
 
-  // Insert fila por fila: si alguno choca con un turno existente (exclusion
-  // constraint), lo ignoramos y seguimos con el resto. La demo igual se ve
-  // poblada — no vale la pena romper todo el flow por un overlap casual.
+  // Insert fila por fila, tolerante a overlap. Si choca con un appointment
+  // existente (exclusion constraint "appointments_no_overlap"), lo skipeamos
+  // silenciosamente. La demo queda con menos turnos pero NO se rompe el
+  // flow de login demo.
   for (const row of inserts) {
     const { error } = await admin.from('appointments').insert(row);
-    if (error && !error.message.toLowerCase().includes('exclude')) {
-      return 'Insert appointments: ' + error.message;
+    if (!error) continue;
+    const msg = (error.message || '').toLowerCase();
+    const isOverlap =
+      msg.includes('exclusion') ||
+      msg.includes('appointments_no_overlap') ||
+      msg.includes('conflicting key');
+    if (!isOverlap) {
+      // Error inesperado: seguimos sin romper el flow, pero logueamos.
+      console.error('[demo] insert appointment failed:', error.message);
     }
   }
 

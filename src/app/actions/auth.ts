@@ -1,6 +1,36 @@
 'use server';
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { LAST_SHOP_COOKIE } from '@/lib/shop-context';
+
+const RESERVED_SLUGS = new Set([
+  'api', 'auth', 'shop', 'login', 'registro',
+  'demo', 'desarrollo', 'onboarding', 'admin', 's', 'desa'
+]);
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,40}[a-z0-9]$/;
+
+function safeShopSlug(raw: string | undefined): string | null {
+  if (!raw) return null;
+  if (RESERVED_SLUGS.has(raw)) return null;
+  if (!SLUG_RE.test(raw)) return null;
+  return raw;
+}
+
+async function destinationForCurrentUser(supabase: ReturnType<typeof createClient>): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return '/';
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('is_admin, shop_id')
+    .eq('id', user.id)
+    .maybeSingle<{ is_admin: boolean; shop_id: string | null }>();
+  if (profile?.is_admin) return '/shop';
+  if (profile && profile.shop_id === null) return '/onboarding';
+  const lastShop = safeShopSlug(cookies().get(LAST_SHOP_COOKIE)?.value);
+  if (lastShop) return `/${lastShop}`;
+  return '/';
+}
 
 export async function sendMagicLink(formData: FormData) {
   const email = String(formData.get('email') || '').trim();
@@ -50,6 +80,27 @@ export async function signupOwner(formData: FormData) {
   });
   if (error) return { error: error.message };
   return { ok: true };
+}
+
+export async function signInWithPassword(formData: FormData) {
+  const email = String(formData.get('email') || '').trim().toLowerCase();
+  const password = String(formData.get('password') || '');
+
+  if (!email || !email.includes('@')) {
+    return { error: 'Ingresá un email válido' };
+  }
+  if (!password) {
+    return { error: 'Ingresá tu contraseña' };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error) {
+    // Mensaje genérico para no filtrar si el email existe o no.
+    return { error: 'Email o contraseña inválidos' };
+  }
+  const dest = await destinationForCurrentUser(supabase);
+  return { ok: true, dest };
 }
 
 export async function signOut() {

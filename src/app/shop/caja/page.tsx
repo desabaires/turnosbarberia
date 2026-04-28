@@ -10,6 +10,10 @@ export default async function ShopCashPage() {
   const shop = await getAdminShop();
   if (!shop) redirect('/login?error=no_shop');
 
+  // Caja es feature Pro. En Starter mandamos al dashboard (mismo patrón
+  // que /shop/stock).
+  if ((shop.plan || '').toLowerCase() !== 'pro') redirect('/shop');
+
   const supabase = createClient();
   const start = new Date(); start.setHours(0, 0, 0, 0);
   const end = new Date(start); end.setDate(end.getDate() + 1);

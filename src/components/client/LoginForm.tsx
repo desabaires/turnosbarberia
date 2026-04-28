@@ -1,17 +1,21 @@
 'use client';
 import { useEffect, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Icon } from '@/components/shared/Icon';
 import { Toast } from '@/components/shared/Toast';
-import { sendMagicLink } from '@/app/actions/auth';
+import { sendMagicLink, signInWithPassword } from '@/app/actions/auth';
+
+type Mode = 'password' | 'magic';
 
 export function LoginForm() {
+  const router = useRouter();
   const [pendingForm, startForm] = useTransition();
   const [msg, setMsg] = useState<{ text: string } | null>(null);
+  const [mode, setMode] = useState<Mode>('password');
   const [sentToEmail, setSentToEmail] = useState<string | null>(null);
   const [sentName, setSentName] = useState<string>('');
 
-  // Screen: "Revisá tu email" después de enviar el magic link
   if (sentToEmail) {
     return (
       <MagicLinkSentScreen
@@ -35,7 +39,6 @@ export function LoginForm() {
 
   return (
     <main className="min-h-screen bg-ink text-bg relative overflow-hidden">
-      {/* ornaments */}
       <div className="absolute -top-[120px] -right-[80px] w-[360px] h-[360px] rounded-full border border-dark-line" aria-hidden="true" />
       <div className="absolute -top-[60px] -right-[20px] w-[240px] h-[240px] rounded-full border border-dark-line" aria-hidden="true" />
 
@@ -44,14 +47,53 @@ export function LoginForm() {
           <div className="font-mono text-[10px] tracking-[3px] text-dark-muted mb-2.5">SAAS · BARBERÍAS</div>
           <h1 className="font-display text-[56px] leading-[0.95] -tracking-[1px]">Turnos<br/>Barbería</h1>
           <div className="mt-3 text-[13px] text-dark-muted max-w-[280px]">
-            Entrá con tu email, <span className="italic text-accent">te mandamos un link mágico.</span>
+            {mode === 'password'
+              ? <>Iniciá sesión con tu <span className="italic text-accent">email y contraseña.</span></>
+              : <>Te mandamos un <span className="italic text-accent">link mágico</span> al email.</>}
           </div>
         </div>
 
-        <div className="mt-8">
-          <form
-            className="flex flex-col gap-3"
-            action={(fd) => startForm(async () => {
+        {/* Tabs */}
+        <div className="mt-6 flex gap-2 bg-dark-card border border-dark-line rounded-xl p-1">
+          <button
+            type="button"
+            onClick={() => { setMode('password'); setMsg(null); }}
+            aria-pressed={mode === 'password'}
+            className={`flex-1 px-3 py-2 rounded-lg text-[13px] font-medium transition ${
+              mode === 'password' ? 'bg-bg text-ink' : 'text-dark-muted hover:text-bg'
+            }`}
+          >
+            Contraseña
+          </button>
+          <button
+            type="button"
+            onClick={() => { setMode('magic'); setMsg(null); }}
+            aria-pressed={mode === 'magic'}
+            className={`flex-1 px-3 py-2 rounded-lg text-[13px] font-medium transition ${
+              mode === 'magic' ? 'bg-bg text-ink' : 'text-dark-muted hover:text-bg'
+            }`}
+          >
+            Magic link
+          </button>
+        </div>
+
+        {mode === 'password' ? (
+          <PasswordForm
+            pending={pendingForm}
+            msg={msg}
+            onSubmit={(fd) => startForm(async () => {
+              setMsg(null);
+              const res = await signInWithPassword(fd);
+              if (res?.error) setMsg({ text: res.error });
+              else router.push(res?.dest || '/');
+            })}
+            onClearMsg={() => setMsg(null)}
+          />
+        ) : (
+          <MagicForm
+            pending={pendingForm}
+            msg={msg}
+            onSubmit={(fd) => startForm(async () => {
               setMsg(null);
               const nameVal = String(fd.get('name') || '');
               const emailVal = String(fd.get('email') || '');
@@ -62,55 +104,9 @@ export function LoginForm() {
                 setSentToEmail(emailVal);
               }
             })}
-          >
-            <label className="bg-dark-card rounded-xl px-4 py-3 border border-dark-line block focus-within:border-accent transition">
-              <span className="block text-[10px] text-dark-muted uppercase tracking-[1.5px] mb-1">Nombre</span>
-              <input
-                name="name"
-                required
-                minLength={2}
-                autoComplete="name"
-                enterKeyHint="next"
-                placeholder="Tu nombre"
-                className="bg-transparent text-bg text-[16px] w-full outline-none placeholder:text-dark-muted/60"
-              />
-            </label>
-            <label className="bg-dark-card rounded-xl px-4 py-3 border border-dark-line flex items-center gap-2.5 focus-within:border-accent transition">
-              <div className="flex-1">
-                <span className="block text-[10px] text-dark-muted uppercase tracking-[1.5px] mb-1">Email</span>
-                <input
-                  name="email"
-                  type="email"
-                  required
-                  autoComplete="email"
-                  inputMode="email"
-                  enterKeyHint="send"
-                  placeholder="vos@email.com"
-                  className="bg-transparent text-bg text-[16px] w-full outline-none font-mono placeholder:text-dark-muted/60"
-                />
-              </div>
-              <Icon name="mail" size={18} color="#8C8A83"/>
-            </label>
-
-            {msg && (
-              <Toast
-                dark
-                tone="error"
-                message={msg.text}
-                onClose={() => setMsg(null)}
-                autoDismissMs={5000}
-              />
-            )}
-
-            <button
-              type="submit"
-              disabled={pendingForm}
-              className="bg-accent text-white border-0 px-4 py-3.5 rounded-xl text-[15px] font-semibold flex items-center justify-center gap-2 tracking-wide disabled:opacity-60 active:scale-[0.98] transition"
-            >
-              {pendingForm ? 'Enviando link…' : (<>Entrar <Icon name="arrow-right" size={18} color="#fff"/></>)}
-            </button>
-          </form>
-        </div>
+            onClearMsg={() => setMsg(null)}
+          />
+        )}
 
         <div className="flex-1 min-h-[16px]" />
 
@@ -124,6 +120,127 @@ export function LoginForm() {
         </div>
       </div>
     </main>
+  );
+}
+
+function PasswordForm({
+  pending, msg, onSubmit, onClearMsg
+}: {
+  pending: boolean;
+  msg: { text: string } | null;
+  onSubmit: (fd: FormData) => void;
+  onClearMsg: () => void;
+}) {
+  return (
+    <div className="mt-4">
+      <form className="flex flex-col gap-3" action={onSubmit}>
+        <label className="bg-dark-card rounded-xl px-4 py-3 border border-dark-line block focus-within:border-accent transition">
+          <span className="block text-[10px] text-dark-muted uppercase tracking-[1.5px] mb-1">Email</span>
+          <input
+            name="email"
+            type="email"
+            required
+            autoComplete="email"
+            inputMode="email"
+            enterKeyHint="next"
+            placeholder="vos@email.com"
+            className="bg-transparent text-bg text-[16px] w-full outline-none font-mono placeholder:text-dark-muted/60"
+          />
+        </label>
+        <label className="bg-dark-card rounded-xl px-4 py-3 border border-dark-line block focus-within:border-accent transition">
+          <span className="block text-[10px] text-dark-muted uppercase tracking-[1.5px] mb-1">Contraseña</span>
+          <input
+            name="password"
+            type="password"
+            required
+            autoComplete="current-password"
+            enterKeyHint="send"
+            placeholder="••••••••"
+            className="bg-transparent text-bg text-[16px] w-full outline-none font-mono placeholder:text-dark-muted/60"
+          />
+        </label>
+
+        {msg && (
+          <Toast
+            dark
+            tone="error"
+            message={msg.text}
+            onClose={onClearMsg}
+            autoDismissMs={5000}
+          />
+        )}
+
+        <button
+          type="submit"
+          disabled={pending}
+          className="bg-accent text-white border-0 px-4 py-3.5 rounded-xl text-[15px] font-semibold flex items-center justify-center gap-2 tracking-wide disabled:opacity-60 active:scale-[0.98] transition"
+        >
+          {pending ? 'Iniciando sesión…' : (<>Entrar <Icon name="arrow-right" size={18} color="#fff"/></>)}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function MagicForm({
+  pending, msg, onSubmit, onClearMsg
+}: {
+  pending: boolean;
+  msg: { text: string } | null;
+  onSubmit: (fd: FormData) => void;
+  onClearMsg: () => void;
+}) {
+  return (
+    <div className="mt-4">
+      <form className="flex flex-col gap-3" action={onSubmit}>
+        <label className="bg-dark-card rounded-xl px-4 py-3 border border-dark-line block focus-within:border-accent transition">
+          <span className="block text-[10px] text-dark-muted uppercase tracking-[1.5px] mb-1">Nombre</span>
+          <input
+            name="name"
+            required
+            minLength={2}
+            autoComplete="name"
+            enterKeyHint="next"
+            placeholder="Tu nombre"
+            className="bg-transparent text-bg text-[16px] w-full outline-none placeholder:text-dark-muted/60"
+          />
+        </label>
+        <label className="bg-dark-card rounded-xl px-4 py-3 border border-dark-line flex items-center gap-2.5 focus-within:border-accent transition">
+          <div className="flex-1">
+            <span className="block text-[10px] text-dark-muted uppercase tracking-[1.5px] mb-1">Email</span>
+            <input
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              inputMode="email"
+              enterKeyHint="send"
+              placeholder="vos@email.com"
+              className="bg-transparent text-bg text-[16px] w-full outline-none font-mono placeholder:text-dark-muted/60"
+            />
+          </div>
+          <Icon name="mail" size={18} color="#8C8A83"/>
+        </label>
+
+        {msg && (
+          <Toast
+            dark
+            tone="error"
+            message={msg.text}
+            onClose={onClearMsg}
+            autoDismissMs={5000}
+          />
+        )}
+
+        <button
+          type="submit"
+          disabled={pending}
+          className="bg-accent text-white border-0 px-4 py-3.5 rounded-xl text-[15px] font-semibold flex items-center justify-center gap-2 tracking-wide disabled:opacity-60 active:scale-[0.98] transition"
+        >
+          {pending ? 'Enviando link…' : (<>Mandame el link <Icon name="arrow-right" size={18} color="#fff"/></>)}
+        </button>
+      </form>
+    </div>
   );
 }
 

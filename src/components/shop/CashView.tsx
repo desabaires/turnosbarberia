@@ -1,5 +1,6 @@
 'use client';
 import { useMemo, useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { Icon } from '@/components/shared/Icon';
 import { Stripe } from '@/components/shared/Stripe';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -24,13 +25,18 @@ type ApptLite = {
 };
 
 export function CashView({
-  sales, products, expenses, todayAppointments
+  sales, products, expenses, todayAppointments, date, todayDate
 }: {
   sales: Sale[];
   products: Product[];
   expenses: Expense[];
   todayAppointments: ApptLite[];
+  /** Fecha seleccionada en formato YYYY-MM-DD (en TZ del shop). */
+  date: string;
+  /** Hoy en TZ del shop (YYYY-MM-DD). Se usa para etiquetar y para el límite del input. */
+  todayDate: string;
 }) {
+  const router = useRouter();
   const [modal, setModal] = useState<null | 'sale' | 'expense'>(null);
   const [toast, setToast] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
 
@@ -41,6 +47,24 @@ export function CashView({
   const totProd = sales.filter(s => s.type === 'product').reduce((a, x) => a + Number(x.amount), 0);
   const totOther = sales.filter(s => s.type === 'other').reduce((a, x) => a + Number(x.amount), 0);
 
+  const isToday = date === todayDate;
+  const dateLabel = (() => {
+    if (isToday) return 'INGRESOS DE HOY';
+    const [y, m, d] = date.split('-').map(Number);
+    const local = new Date(y, m - 1, d);
+    return `INGRESOS · ${local.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' }).replace('.', '').toUpperCase()}`;
+  })();
+
+  const goToDate = (next: string) => {
+    if (next === todayDate) router.push('/shop/caja');
+    else router.push(`/shop/caja?date=${next}`);
+  };
+  const yesterday = (() => {
+    const [y, m, d] = todayDate.split('-').map(Number);
+    const t = new Date(y, m - 1, d - 1);
+    return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`;
+  })();
+
   return (
     <div className="flex-1 overflow-auto px-5 pt-4 pb-5 md:px-8">
       {toast && (
@@ -49,10 +73,30 @@ export function CashView({
         </div>
       )}
 
+      {/* Date picker */}
+      <div className="flex items-center gap-2 mb-3">
+        <button type="button" onClick={() => goToDate(todayDate)} disabled={isToday}
+          className={`px-3 py-2 rounded-m text-[12px] font-medium transition active:scale-[0.97] ${isToday ? 'bg-ink text-bg cursor-default' : 'bg-card border border-line text-ink hover:border-ink/30'}`}>
+          Hoy
+        </button>
+        <button type="button" onClick={() => goToDate(yesterday)} disabled={date === yesterday}
+          className={`px-3 py-2 rounded-m text-[12px] font-medium transition active:scale-[0.97] ${date === yesterday ? 'bg-ink text-bg cursor-default' : 'bg-card border border-line text-ink hover:border-ink/30'}`}>
+          Ayer
+        </button>
+        <input
+          type="date"
+          value={date}
+          max={todayDate}
+          onChange={(e) => { if (e.target.value) goToDate(e.target.value); }}
+          className="ml-auto bg-card border border-line rounded-m px-3 py-2 text-[12px] font-mono text-ink outline-none focus:border-ink/30 transition"
+          aria-label="Elegir fecha"
+        />
+      </div>
+
       {/* Big total con egresos + utilidad */}
       <div className="bg-bg text-ink rounded-2xl px-5 py-4 relative overflow-hidden md:px-7 md:py-6">
         <Stripe className="absolute top-0 left-0 right-0" />
-        <div className="font-mono text-[10px] tracking-[2px] text-muted mt-2">INGRESOS DEL DÍA</div>
+        <div className="font-mono text-[10px] tracking-[2px] text-muted mt-2">{dateLabel}</div>
         <div className="font-display text-[44px] leading-none mt-1.5 -tracking-[1px] md:text-[56px]">{money(ingresos)}</div>
         <div className="flex gap-2.5 mt-3.5 md:max-w-2xl">
           <Tile l="Servicios" v={money(totServ)} />

@@ -1,21 +1,37 @@
 import { redirect } from 'next/navigation';
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createAdminClient } from '@/lib/supabase/server';
 import { LoginForm } from '@/components/client/LoginForm';
 import { MobileShell } from '@/components/shared/MobileShell';
 
 export const dynamic = 'force-dynamic';
 
-// /login ahora es SOLO magic link para dueños con cuenta. Los flujos de demo
-// viven en /demo. Si el user ya tiene sesión, lo mandamos a su panel (admin)
-// o a la landing (no-admin).
+// Si el user entra a /login ya logueado, lo llevamos directo a donde
+// corresponde según rol: dueño → panel u onboarding, cliente → su barbería
+// si la tiene atada, o landing como fallback.
 export default async function LoginPage() {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   if (user) {
     const { data: profile } = await supabase
-      .from('profiles').select('is_admin').eq('id', user.id).maybeSingle();
-    redirect((profile as any)?.is_admin ? '/shop' : '/');
+      .from('profiles')
+      .select('is_admin, shop_id')
+      .eq('id', user.id)
+      .maybeSingle<{ is_admin: boolean; shop_id: string | null }>();
+
+    if (profile?.is_admin && profile.shop_id) redirect('/shop');
+    if (profile?.is_admin && !profile.shop_id) redirect('/onboarding');
+
+    if (profile?.shop_id) {
+      const admin = createAdminClient();
+      const { data: shop } = await admin
+        .from('shops')
+        .select('slug')
+        .eq('id', profile.shop_id)
+        .maybeSingle<{ slug: string }>();
+      if (shop?.slug) redirect(`/${shop.slug}`);
+    }
+    redirect('/');
   }
   return <MobileShell><LoginForm /></MobileShell>;
 }

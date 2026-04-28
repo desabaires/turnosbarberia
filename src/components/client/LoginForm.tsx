@@ -8,6 +8,11 @@ import { sendMagicLink, signInWithPassword } from '@/app/actions/auth';
 
 type Mode = 'password' | 'magic';
 
+const MODE_LABELS: Record<Mode, string> = {
+  password: 'Tengo cuenta',
+  magic: 'Es mi primera vez'
+};
+
 export function LoginForm() {
   const router = useRouter();
   const [pendingForm, startForm] = useTransition();
@@ -49,32 +54,25 @@ export function LoginForm() {
           <div className="mt-3 text-[13px] text-dark-muted max-w-[280px]">
             {mode === 'password'
               ? <>Iniciá sesión con tu <span className="italic text-accent">email y contraseña.</span></>
-              : <>Te mandamos un <span className="italic text-accent">link mágico</span> al email.</>}
+              : <>Reservaste sin crear cuenta antes? Te mandamos un <span className="italic text-accent">link mágico</span> al email para entrar.</>}
           </div>
         </div>
 
         {/* Tabs */}
         <div className="mt-6 flex gap-2 bg-dark-card border border-dark-line rounded-xl p-1">
-          <button
-            type="button"
-            onClick={() => { setMode('password'); setMsg(null); }}
-            aria-pressed={mode === 'password'}
-            className={`flex-1 px-3 py-2 rounded-lg text-[13px] font-medium transition ${
-              mode === 'password' ? 'bg-bg text-ink' : 'text-dark-muted hover:text-bg'
-            }`}
-          >
-            Contraseña
-          </button>
-          <button
-            type="button"
-            onClick={() => { setMode('magic'); setMsg(null); }}
-            aria-pressed={mode === 'magic'}
-            className={`flex-1 px-3 py-2 rounded-lg text-[13px] font-medium transition ${
-              mode === 'magic' ? 'bg-bg text-ink' : 'text-dark-muted hover:text-bg'
-            }`}
-          >
-            Magic link
-          </button>
+          {(['password', 'magic'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => { setMode(m); setMsg(null); }}
+              aria-pressed={mode === m}
+              className={`flex-1 px-3 py-2 rounded-lg text-[13px] font-medium transition ${
+                mode === m ? 'bg-bg text-ink' : 'text-dark-muted hover:text-bg'
+              }`}
+            >
+              {MODE_LABELS[m]}
+            </button>
+          ))}
         </div>
 
         {mode === 'password' ? (

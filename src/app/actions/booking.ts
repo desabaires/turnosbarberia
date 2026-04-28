@@ -119,6 +119,31 @@ export async function createBooking(input: z.infer<typeof BookingSchema>) {
   const supabase = createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
+  // Reprogramación: validamos PRIMERO que el turno viejo existe y pertenece
+  // al user, así no terminamos con dos turnos activos si el cancel falla
+  // después del insert. Si la validación falla, abortamos antes de tocar
+  // nada.
+  let rescheduleTargetId: string | null = null;
+  if (data.rescheduleFromId) {
+    if (!user) {
+      return { error: 'Para reprogramar tenés que estar logueado.' };
+    }
+    const { data: oldAppt } = await admin
+      .from('appointments')
+      .select('id, status')
+      .eq('id', data.rescheduleFromId)
+      .eq('shop_id', shop.id)
+      .eq('profile_id', user.id)
+      .maybeSingle<{ id: string; status: string }>();
+    if (!oldAppt) {
+      return { error: 'No encontramos el turno a reprogramar.' };
+    }
+    if (oldAppt.status === 'cancelled') {
+      return { error: 'Ese turno ya estaba cancelado.' };
+    }
+    rescheduleTargetId = oldAppt.id;
+  }
+
   const { data: appointment, error: insErr } = await admin
     .from('appointments')
     .insert({
@@ -143,6 +168,21 @@ export async function createBooking(input: z.infer<typeof BookingSchema>) {
     return { error: insErr.message };
   }
 
+  // Cancel del viejo: ahora con el id ya validado. Si falla acá (red, RLS),
+  // hacemos rollback del turno nuevo para no dejar dos turnos activos.
+  if (rescheduleTargetId) {
+    const { error: cancelErr } = await admin
+      .from('appointments')
+      .update({ status: 'cancelled' })
+      .eq('id', rescheduleTargetId)
+      .neq('status', 'cancelled');
+    if (cancelErr) {
+      console.error('[booking] reschedule cancel failed:', cancelErr.message);
+      await admin.from('appointments').delete().eq('id', appointment!.id);
+      return { error: 'No pudimos reprogramar tu turno. Intentá de nuevo.' };
+    }
+  }
+
   // Atar el cliente a esta barbería en su PRIMERA reserva. A partir de acá,
   // el login lo manda derecho a `/{slug}` sin que tenga que recordar la URL.
   // Si el user ya tiene shop_id (vino de otro shop) no lo pisamos: queda con
@@ -159,23 +199,6 @@ export async function createBooking(input: z.infer<typeof BookingSchema>) {
         .from('profiles')
         .update({ shop_id: shop.id })
         .eq('id', user.id);
-    }
-  }
-
-  // Reprogramación: cancelar el turno viejo (si pertenece al user logueado
-  // y al mismo shop). Si el cancel falla, NO rollbackeamos el nuevo turno —
-  // mejor terminar con el turno nuevo creado y un viejo huérfano que dejar
-  // al cliente sin reserva.
-  if (data.rescheduleFromId && user) {
-    const { error: cancelErr } = await admin
-      .from('appointments')
-      .update({ status: 'cancelled' })
-      .eq('id', data.rescheduleFromId)
-      .eq('shop_id', shop.id)
-      .eq('profile_id', user.id)
-      .neq('status', 'cancelled');
-    if (cancelErr) {
-      console.error('[booking] reschedule cancel failed:', cancelErr.message);
     }
   }
 
@@ -256,6 +279,11 @@ export async function cancelAppointment(id: string) {
   return { ok: true };
 }
 
+// Estados terminales: una vez que un turno cae acá, no se puede mover más.
+// Evita que un admin marque "completed" → "pending" por error y rompa
+// reportes / caja.
+const TERMINAL_STATUSES = new Set(['completed', 'cancelled', 'no_show']);
+
 export async function setAppointmentStatus(
   id: string,
   status: 'confirmed' | 'in_progress' | 'completed' | 'cancelled' | 'no_show'
@@ -268,6 +296,17 @@ export async function setAppointmentStatus(
   const { data: profile } = await supabase
     .from('profiles').select('is_admin, shop_id').eq('id', user.id).maybeSingle<{ is_admin: boolean; shop_id: string | null }>();
   if (!profile?.is_admin || !profile.shop_id) return { error: 'Solo admins' };
+
+  const { data: current } = await supabase
+    .from('appointments')
+    .select('status')
+    .eq('id', id)
+    .eq('shop_id', profile.shop_id)
+    .maybeSingle<{ status: string }>();
+  if (!current) return { error: 'Turno no encontrado' };
+  if (TERMINAL_STATUSES.has(current.status) && current.status !== status) {
+    return { error: 'Ese turno ya está cerrado y no se puede modificar.' };
+  }
 
   const { error } = await supabase
     .from('appointments')

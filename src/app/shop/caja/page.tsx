@@ -1,12 +1,26 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { getAdminShop } from '@/lib/shop-context';
+import { partsInAR, SHOP_OFFSET } from '@/lib/tz';
 import { ShopHeader } from '@/components/shop/ShopHeader';
 import { CashView } from '@/components/shop/CashView';
 
 export const dynamic = 'force-dynamic';
 
-export default async function ShopCashPage() {
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Bounds [00:00, 24:00) del día en hora local del shop, expresados en UTC.
+function dayBoundsAR(dateStr: string): { startISO: string; endISO: string } {
+  const start = new Date(`${dateStr}T00:00:00${SHOP_OFFSET}`);
+  const end = new Date(start.getTime() + 24 * 3600_000);
+  return { startISO: start.toISOString(), endISO: end.toISOString() };
+}
+
+export default async function ShopCashPage({
+  searchParams
+}: {
+  searchParams: { date?: string };
+}) {
   const shop = await getAdminShop();
   if (!shop) redirect('/login?error=no_shop');
 
@@ -14,31 +28,33 @@ export default async function ShopCashPage() {
   // que /shop/stock).
   if ((shop.plan || '').toLowerCase() !== 'pro') redirect('/shop');
 
+  const todayAR = partsInAR(new Date()).date;
+  const date = searchParams.date && DATE_RE.test(searchParams.date) ? searchParams.date : todayAR;
+  const { startISO, endISO } = dayBoundsAR(date);
+
   const supabase = createClient();
-  const start = new Date(); start.setHours(0, 0, 0, 0);
-  const end = new Date(start); end.setDate(end.getDate() + 1);
 
   const [{ data: sales }, { data: products }, { data: expenses }, { data: appts }] = await Promise.all([
     supabase
       .from('sales')
       .select('*')
       .eq('shop_id', shop.id)
-      .gte('created_at', start.toISOString())
-      .lt('created_at', end.toISOString())
+      .gte('created_at', startISO)
+      .lt('created_at', endISO)
       .order('created_at', { ascending: false }),
     supabase.from('products').select('*').eq('shop_id', shop.id).eq('is_active', true).order('name'),
     supabase
       .from('expenses').select('*')
       .eq('shop_id', shop.id)
-      .gte('paid_at', start.toISOString())
-      .lt('paid_at', end.toISOString())
+      .gte('paid_at', startISO)
+      .lt('paid_at', endISO)
       .order('paid_at', { ascending: false }),
     supabase
       .from('appointments')
       .select('id, customer_name, starts_at, status, services(name, price), barbers(name)')
       .eq('shop_id', shop.id)
-      .gte('starts_at', start.toISOString())
-      .lt('starts_at', end.toISOString())
+      .gte('starts_at', startISO)
+      .lt('starts_at', endISO)
       .neq('status', 'cancelled')
       .order('starts_at')
   ]);
@@ -73,6 +89,8 @@ export default async function ShopCashPage() {
         products={(products as any) || []}
         expenses={(expenses as any) || []}
         todayAppointments={todayAppointments}
+        date={date}
+        todayDate={todayAR}
       />
     </main>
   );

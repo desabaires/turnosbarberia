@@ -56,12 +56,23 @@ export function BookingFlow({
 
   useEffect(() => {
     if (!serviceId || !dateISO) { setSlots([]); return; }
+    let cancelled = false;
     setLoadingSlots(true);
     fetch(`/api/availability?shopSlug=${shopSlug}&barberId=${barberId}&serviceId=${serviceId}&date=${dateISO}`)
-      .then(r => r.json())
-      .then(d => setSlots(d.slots || []))
-      .finally(() => setLoadingSlots(false));
-  }, [barberId, serviceId, dateISO]);
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`http ${r.status}`);
+        return r.json();
+      })
+      .then(d => { if (!cancelled) setSlots(d.slots || []); })
+      .catch(() => {
+        if (!cancelled) {
+          setSlots([]);
+          setError('No pudimos cargar los horarios. Revisá tu conexión y volvé a intentar.');
+        }
+      })
+      .finally(() => { if (!cancelled) setLoadingSlots(false); });
+    return () => { cancelled = true; };
+  }, [barberId, serviceId, dateISO, shopSlug]);
 
   const total = service ? Number(service.price) : 0;
   const stepAnimClass = step > prevStep ? 'step-enter' : step < prevStep ? 'step-enter-back' : '';
@@ -151,7 +162,7 @@ export function BookingFlow({
 
             <SectionLabel className="mt-5">BARBERO</SectionLabel>
             <div className="flex gap-2">
-              {[{ id: 'any', name: 'Cualquiera', initials: '*', hue: 55 }, ...barbers].map(b => {
+              {([{ id: 'any', name: 'Cualquiera', initials: '*', hue: 55 } as Pick<Barber, 'id' | 'name' | 'initials' | 'hue'>, ...barbers]).map(b => {
                 const sel = b.id === barberId;
                 return (
                   <button key={b.id} type="button" onClick={() => setBarberId(b.id)}
@@ -161,7 +172,7 @@ export function BookingFlow({
                     {b.id === 'any' ? (
                       <div className={`w-9 h-9 mx-auto rounded-full grid place-items-center text-lg ${sel ? 'border border-dashed border-dark-muted' : 'border border-dashed border-muted'}`}>*</div>
                     ) : (
-                      <div className="flex justify-center"><Avatar name={(b as any).initials} size={36} hue={(b as any).hue}/></div>
+                      <div className="flex justify-center"><Avatar name={b.initials} size={36} hue={b.hue}/></div>
                     )}
                     <div className="text-xs mt-2 font-medium">{b.name}</div>
                   </button>

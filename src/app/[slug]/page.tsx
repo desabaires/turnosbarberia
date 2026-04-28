@@ -92,6 +92,15 @@ export default async function ShopHomePage({ params }: { params: { slug: string 
           <Icon name="plus" size={18}/> Reservar nuevo turno
         </Link>
 
+        {!user && (
+          <Link
+            href={`/registro?role=cliente&shop=${slug}`}
+            className="mt-2.5 w-full bg-card border border-line text-ink px-4 py-3 rounded-xl text-[13px] font-medium flex items-center justify-center gap-2 active:scale-[0.99] transition"
+          >
+            <Icon name="user" size={14}/> Crear cuenta para guardar tu historial
+          </Link>
+        )}
+
         {/* Services */}
         <div className="mt-6 flex items-baseline justify-between">
           <h2 className="font-display text-[22px] -tracking-[0.3px]">Servicios</h2>

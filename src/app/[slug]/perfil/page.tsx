@@ -6,7 +6,6 @@ import { getShopBySlug, LAST_SHOP_COOKIE } from '@/lib/shop-context';
 import { TabBar } from '@/components/client/TabBar';
 import { Icon } from '@/components/shared/Icon';
 import { Avatar } from '@/components/shared/Avatar';
-import { ChangeAvatarButton, EmailNotifsToggle } from '@/components/client/ProfileControls';
 import { signOut } from '@/app/actions/auth';
 
 export const dynamic = 'force-dynamic';
@@ -48,12 +47,7 @@ export default async function PerfilPage({ params }: { params: { slug: string } 
             <div className="text-lg font-semibold truncate">{profile?.name || 'Sin nombre'}</div>
             <div className="text-[12px] text-muted mt-0.5 font-mono truncate">{profile?.email || user.email}</div>
             {profile?.phone && <div className="text-[12px] text-muted mt-0.5 font-mono">{profile.phone}</div>}
-            <div className="mt-2"><ChangeAvatarButton /></div>
           </div>
-        </div>
-
-        <div className="mt-3">
-          <EmailNotifsToggle />
         </div>
 
         {/* Barbería section */}

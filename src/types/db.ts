@@ -115,6 +115,15 @@ export type Expense = {
   created_at: string;
 };
 
+export type ShopMemberRole = 'owner' | 'admin';
+
+export type ShopMember = {
+  profile_id: string;
+  shop_id: string;
+  role: ShopMemberRole;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -127,6 +136,7 @@ export type Database = {
       products: { Row: Product; Insert: Partial<Product>; Update: Partial<Product> };
       sales: { Row: Sale; Insert: Partial<Sale>; Update: Partial<Sale> };
       expenses: { Row: Expense; Insert: Partial<Expense>; Update: Partial<Expense> };
+      shop_members: { Row: ShopMember; Insert: Partial<ShopMember>; Update: Partial<ShopMember> };
     };
   };
 };

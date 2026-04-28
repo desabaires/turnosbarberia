@@ -119,6 +119,111 @@ export async function signInWithPassword(formData: FormData) {
   return { ok: true, dest };
 }
 
+export async function signupClient(formData: FormData) {
+  const email = String(formData.get('email') || '').trim().toLowerCase();
+  const name  = String(formData.get('name')  || '').trim();
+  const password = String(formData.get('password') || '');
+  const shopSlugRaw = String(formData.get('shopSlug') || '').trim();
+  const shopSlug = safeShopSlug(shopSlugRaw) || null;
+
+  if (name.length < 2) return { error: 'Ingresá tu nombre completo' };
+  if (!email || !email.includes('@')) return { error: 'Ingresá un email válido' };
+  if (password.length < 8) return { error: 'La contraseña tiene que tener al menos 8 caracteres' };
+
+  const admin = createAdminClient();
+
+  // Si viene shopSlug, lo resolvemos primero — así fallamos rápido sin
+  // crear un user huérfano si la barbería no existe / no está activa.
+  let targetShopId: string | null = null;
+  let targetShopSlug: string | null = null;
+  if (shopSlug) {
+    const { data: shop } = await admin
+      .from('shops')
+      .select('id, slug, is_active')
+      .eq('slug', shopSlug)
+      .maybeSingle<{ id: string; slug: string; is_active: boolean }>();
+    if (!shop || !shop.is_active) {
+      return { error: 'La barbería no está disponible.' };
+    }
+    targetShopId = shop.id;
+    targetShopSlug = shop.slug;
+  }
+
+  // Service-role: creamos al user con email_confirm=true para que pueda
+  // loguearse inmediatamente (sin tener que ir al email a verificar).
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { name }
+  });
+  if (error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('already') || msg.includes('exists') || msg.includes('registered')) {
+      return { error: 'Ya hay una cuenta con ese email. Probá iniciar sesión.' };
+    }
+    return { error: error.message };
+  }
+  if (!data.user) return { error: 'No se pudo crear la cuenta.' };
+
+  const userId = data.user.id;
+
+  // Reclamar reservas anónimas previas hechas con este mismo email: ata
+  // appointments.profile_id al nuevo user para que el cliente vea su
+  // historial cuando entre. Si esos turnos pertenecen a un shop, derivamos
+  // ese shop_id como su barbería "atada" (a menos que ya hayamos resuelto
+  // uno desde shopSlug).
+  await admin
+    .from('appointments')
+    .update({ profile_id: userId })
+    .eq('customer_email', email)
+    .is('profile_id', null);
+
+  if (!targetShopId) {
+    // Buscar el shop de la última reserva del cliente con ese email.
+    const { data: lastAppt } = await admin
+      .from('appointments')
+      .select('shop_id, shops(slug, is_active)')
+      .eq('profile_id', userId)
+      .order('starts_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{
+        shop_id: string;
+        shops: { slug: string; is_active: boolean } | null;
+      }>();
+    if (lastAppt?.shops?.is_active) {
+      targetShopId = lastAppt.shop_id;
+      targetShopSlug = lastAppt.shops.slug;
+    }
+  }
+
+  // Profile: aseguramos el nombre/email + shop_id si lo tenemos.
+  await admin
+    .from('profiles')
+    .upsert(
+      {
+        id: userId,
+        name,
+        email,
+        is_admin: false,
+        shop_id: targetShopId
+      },
+      { onConflict: 'id' }
+    );
+
+  // Auto-login: signInWithPassword en el mismo server action setea las
+  // cookies de sesión, así el cliente queda dentro sin re-pedirle creds.
+  const supabase = createClient();
+  const { error: loginErr } = await supabase.auth.signInWithPassword({ email, password });
+  if (loginErr) {
+    return { ok: true, dest: '/login?registered=1' };
+  }
+
+  // Destino final: barbería si conseguimos atar una, landing si no.
+  const dest = targetShopSlug ? `/${targetShopSlug}` : '/';
+  return { ok: true, dest };
+}
+
 export async function signOut() {
   const supabase = createClient();
   await supabase.auth.signOut();

@@ -58,14 +58,22 @@ export function ConfirmationActions({
     return { icsHref, gcalHref, shareText };
   }, [startISO, endISO, service, barber, orderNum, shopName, shopAddress]);
 
-  const canShare = typeof navigator !== 'undefined' && typeof (navigator as any).share === 'function';
+  // navigator.share es estándar pero la lib.dom de TS lo marca opcional.
+  // Lo tipamos explícito en lugar de usar `as any`.
+  type ShareNavigator = Navigator & {
+    share?: (data: { title?: string; text?: string; url?: string }) => Promise<void>;
+  };
+  const nav = typeof navigator !== 'undefined' ? (navigator as ShareNavigator) : null;
+  const canShare = !!nav && typeof nav.share === 'function';
 
   const onShare = async () => {
+    if (!nav?.share) return;
     try {
-      await (navigator as any).share({ title: `Turno · ${shopName}`, text: shareText });
+      await nav.share({ title: `Turno · ${shopName}`, text: shareText });
       setShared('ok');
     } catch {
-      setShared('fail');
+      // El user puede cancelar el share — eso lanza, pero no es un error real.
+      setShared(null);
     }
   };
 

@@ -18,6 +18,7 @@ export function MyAppointmentsView({ slug, upcoming, history }: { slug: string; 
   const [tab, setTab] = useState<'next'|'past'>('next');
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
 
   const featured = upcoming[0];
   const rest = upcoming.slice(1);
@@ -27,6 +28,15 @@ export function MyAppointmentsView({ slug, upcoming, history }: { slug: string; 
     if (rescheduleId) qs.set('reschedule', rescheduleId);
     const tail = qs.toString();
     return `/${slug}/reservar${tail ? `?${tail}` : ''}`;
+  };
+
+  const doCancel = (id: string) => {
+    setConfirmCancel(null);
+    start(async () => {
+      setError(null);
+      const r = await cancelAppointment(id);
+      if (r?.error) setError(r.error);
+    });
   };
 
   return (
@@ -60,14 +70,7 @@ export function MyAppointmentsView({ slug, upcoming, history }: { slug: string; 
                 ctaHref={reservar()}
               />
             ) : (
-              <FeaturedCard a={featured} reservarHref={reservar((featured as any).service_id || '', featured.id)} pending={pending} onCancel={(id) => {
-                if (!confirm('¿Cancelar este turno? No se puede deshacer.')) return;
-                start(async () => {
-                  setError(null);
-                  const r = await cancelAppointment(id);
-                  if (r?.error) setError(r.error);
-                });
-              }}/>
+              <FeaturedCard a={featured} reservarHref={reservar(featured.service_id || '', featured.id)} pending={pending} onCancel={(id) => setConfirmCancel(id)}/>
             )}
             {error && (
               <div className="mt-3">
@@ -112,13 +115,50 @@ export function MyAppointmentsView({ slug, upcoming, history }: { slug: string; 
                       <div className="text-[13px] font-medium">{a.services?.name}</div>
                       <div className="text-[11px] text-muted">{d.toLocaleDateString('es-AR', { day:'2-digit', month:'short' , timeZone: 'America/Argentina/Buenos_Aires' }).replace('.','')} · con {a.barbers?.name}</div>
                     </div>
-                    <Link href={reservar((a as any).service_id || '')} className="text-[11px] text-muted underline py-2 px-1 active:opacity-60 transition">Repetir</Link>
+                    <Link href={reservar(a.service_id || '')} className="text-[11px] text-muted underline py-2 px-1 active:opacity-60 transition">Repetir</Link>
                   </div>
                 );
               })
             )}
           </>
         )}
+      </div>
+
+      {confirmCancel && (
+        <CancelConfirmDialog
+          onConfirm={() => doCancel(confirmCancel)}
+          onClose={() => setConfirmCancel(null)}
+          pending={pending}
+        />
+      )}
+    </div>
+  );
+}
+
+function CancelConfirmDialog({
+  onConfirm, onClose, pending
+}: {
+  onConfirm: () => void;
+  onClose: () => void;
+  pending: boolean;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-black/60 grid place-items-center p-5" role="dialog" aria-modal="true">
+      <div className="w-full max-w-[340px] bg-card border border-line rounded-2xl p-5">
+        <div className="font-display text-[22px] leading-tight">¿Cancelar este turno?</div>
+        <p className="text-[13px] text-muted mt-2 leading-relaxed">
+          Esta acción no se puede deshacer. Si querés reprogramar, cerrá este aviso y tocá Reprogramar.
+        </p>
+        <div className="flex gap-2 mt-4">
+          <button type="button" onClick={onClose} disabled={pending}
+            className="flex-1 min-h-[42px] bg-transparent border border-line text-ink rounded-m px-3 py-2 text-[13px] font-medium active:scale-[0.98] transition">
+            Volver
+          </button>
+          <button type="button" onClick={onConfirm} disabled={pending}
+            className="flex-1 min-h-[42px] bg-ink text-bg rounded-m px-3 py-2 text-[13px] font-semibold disabled:opacity-50 active:scale-[0.98] transition">
+            {pending ? 'Cancelando…' : 'Sí, cancelar'}
+          </button>
+        </div>
       </div>
     </div>
   );

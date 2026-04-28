@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import crypto from 'node:crypto';
 import { createAdminClient } from '@/lib/supabase/server';
 import { sendAppointmentReminderToCustomer } from '@/lib/email';
 
@@ -15,7 +16,11 @@ function auth(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
   const header = request.headers.get('authorization') || '';
-  return header === `Bearer ${secret}`;
+  const expected = `Bearer ${secret}`;
+  const a = Buffer.from(header);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
 }
 
 export async function GET(request: Request) {

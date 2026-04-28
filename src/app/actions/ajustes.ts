@@ -39,6 +39,25 @@ export async function updateShop(input: {
   if (tzInput && !TIMEZONE_RE.test(tzInput)) return { error: 'Timezone inválida' };
 
   const supabase = createClient();
+
+  // Cambio de timezone bloqueado si hay turnos próximos: los `schedules`
+  // están guardados en hora local del shop (HH:MM strings), así que mover
+  // la TZ desplaza efectivamente el horario de atención. Pedimos cancelar
+  // o esperar a que terminen para evitar inconsistencias en agenda y caja.
+  if (tzInput && tzInput !== shop.timezone) {
+    const { count } = await supabase
+      .from('appointments')
+      .select('id', { count: 'exact', head: true })
+      .eq('shop_id', shop.id)
+      .gte('starts_at', new Date().toISOString())
+      .in('status', ['pending', 'confirmed', 'in_progress']);
+    if ((count ?? 0) > 0) {
+      return {
+        error: 'No podés cambiar la zona horaria mientras haya turnos próximos. Cancelálos o esperá a que se completen.'
+      };
+    }
+  }
+
   const { error } = await supabase
     .from('shops')
     .update({ name, address, phone, timezone })
@@ -139,7 +158,7 @@ export async function upsertBarber(input: {
     if (error) return { error: error.message };
   } else {
     // B.1 · Plan enforcement: Starter = hasta 3 barberos activos por sede.
-    if ((shop as any).plan === 'starter') {
+    if (shop.plan === 'starter') {
       const { count } = await supabase
         .from('barbers')
         .select('id', { count: 'exact', head: true })
@@ -207,7 +226,7 @@ export async function toggleBarber(id: string, active: boolean) {
   if (!z.string().uuid().safeParse(id).success) return { error: 'ID inválido' };
 
   // Si reactivamos, también chequeamos el límite del plan.
-  if (active && (shop as any).plan === 'starter') {
+  if (active && shop.plan === 'starter') {
     const supabase = createClient();
     const { count } = await supabase
       .from('barbers')
@@ -325,7 +344,7 @@ export async function addShop(input: {
       owner_id: user.id,
       is_active: false,
       // Nuevas sedes heredan el plan del owner (si es pro, seguirá siendo pro).
-      plan: (currentShop as any).plan || 'starter'
+      plan: currentShop.plan || 'starter'
     });
   if (shopErr) return { error: 'No se pudo crear la sede: ' + shopErr.message };
 

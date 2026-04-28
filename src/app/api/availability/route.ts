@@ -35,11 +35,18 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'bad shopSlug' }, { status: 400 });
   }
 
-  let shopId: string | null = shopIdParam;
-  if (!shopId && shopSlug) {
+  // Si vienen ambos, validamos que matchean — un atacante podría intentar
+  // pedir la disponibilidad de otro shop pasando shopSlug=propio + shopId=ajeno.
+  let shopId: string | null = null;
+  if (shopSlug) {
     const shop = await getShopBySlug(shopSlug);
     if (!shop) return NextResponse.json({ error: 'shop not found' }, { status: 404 });
+    if (shopIdParam && shopIdParam !== shop.id) {
+      return NextResponse.json({ error: 'shop mismatch' }, { status: 400 });
+    }
     shopId = shop.id;
+  } else if (shopIdParam) {
+    shopId = shopIdParam;
   }
   if (!shopId) return NextResponse.json({ error: 'missing shop' }, { status: 400 });
 

@@ -6,8 +6,9 @@ import { Icon } from '@/components/shared/Icon';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { Toast } from '@/components/shared/Toast';
 import { money } from '@/lib/format';
-import { setAppointmentStatus } from '@/app/actions/booking';
+import { setAppointmentStatus, moveAppointment } from '@/app/actions/booking';
 import { ShopSwitcher, type ShopBrief } from '@/components/shop/ShopSwitcher';
+import { isoFromARLocal } from '@/lib/tz';
 
 type A = {
   id: string; starts_at: string; ends_at: string; customer_name: string; status: string;
@@ -64,9 +65,77 @@ export function AgendaView({
   const [error, setError] = useState<string | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
 
-  const total = appointments.length;
-  const done = appointments.filter(a => a.status === 'completed').length;
-  const ingresos = appointments
+  // Overrides locales para reflejar drag&drop al toque sin esperar el round
+  // trip al server. Si el move falla, los limpiamos y mostramos el toast.
+  const [overrides, setOverrides] = useState<Map<string, { starts_at: string; ends_at: string; barber_id: string }>>(new Map());
+  const barberById = useMemo(() => {
+    const m = new Map<string, A['barbers']>();
+    for (const b of barbers) m.set(b.id, b);
+    return m;
+  }, [barbers]);
+  const applyOverride = (a: A): A => {
+    const o = overrides.get(a.id);
+    if (!o) return a;
+    const nb = barberById.get(o.barber_id) || a.barbers;
+    return { ...a, starts_at: o.starts_at, ends_at: o.ends_at, barbers: nb };
+  };
+  const visibleAppointments = useMemo(() => appointments.map(applyOverride), [appointments, overrides, barberById]); // eslint-disable-line react-hooks/exhaustive-deps
+  const visibleWeek = useMemo(() => (weekAppointments || []).map(applyOverride), [weekAppointments, overrides, barberById]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onMove = (apptId: string, target: { dayISO: string; minutes: number; columnId: string; columnKind: 'barber' | 'day' }) => {
+    const appt = (weekAppointments || appointments).find(a => a.id === apptId)
+      || appointments.find(a => a.id === apptId);
+    if (!appt) return;
+
+    const durationMin = Math.max(1, Math.round((new Date(appt.ends_at).getTime() - new Date(appt.starts_at).getTime()) / 60_000));
+    const hh = Math.floor(target.minutes / 60);
+    const mm = target.minutes % 60;
+    const newStartISO = isoFromARLocal(target.dayISO, hh, mm);
+    const newEndISO = new Date(new Date(newStartISO).getTime() + durationMin * 60_000).toISOString();
+    const newBarberId = target.columnKind === 'barber' ? target.columnId : appt.barbers?.id;
+
+    // No-op si quedó en el mismo lugar (evita round trip).
+    if (appt.starts_at === newStartISO && appt.barbers?.id === newBarberId) return;
+
+    // Optimistic.
+    const prev = overrides.get(apptId);
+    setOverrides(prevMap => {
+      const next = new Map(prevMap);
+      next.set(apptId, { starts_at: newStartISO, ends_at: newEndISO, barber_id: newBarberId });
+      return next;
+    });
+
+    start(async () => {
+      const r = await moveAppointment({
+        id: apptId,
+        startsAt: newStartISO,
+        ...(newBarberId !== appt.barbers?.id ? { barberId: newBarberId } : {})
+      });
+      if ((r as any)?.error) {
+        // Rollback
+        setOverrides(prevMap => {
+          const next = new Map(prevMap);
+          if (prev) next.set(apptId, prev); else next.delete(apptId);
+          return next;
+        });
+        setError((r as any).error);
+      } else {
+        // Refresh server data; al volver, las nuevas props deberían hacer
+        // el override redundante. Lo limpiamos para no quedar pegados a un
+        // valor stale si el server normaliza algo.
+        router.refresh();
+        setOverrides(prevMap => {
+          const next = new Map(prevMap);
+          next.delete(apptId);
+          return next;
+        });
+      }
+    });
+  };
+
+  const total = visibleAppointments.length;
+  const done = visibleAppointments.filter(a => a.status === 'completed').length;
+  const ingresos = visibleAppointments
     .filter(a => a.status !== 'cancelled' && a.status !== 'no_show')
     .reduce((s, a) => s + Number(a.services?.price || 0), 0);
 
@@ -122,7 +191,7 @@ export function AgendaView({
       {view === 'day' ? (
         <DayView
           dayISO={dayISO}
-          appointments={appointments}
+          appointments={visibleAppointments}
           barbers={barbers}
           slots={slots}
           startH={startH}
@@ -141,13 +210,14 @@ export function AgendaView({
               if ((r as any)?.error) setError((r as any).error);
             });
           }}
+          onMove={onMove}
           error={error}
           onCloseError={() => setError(null)}
         />
       ) : (
         <WeekView
           weekStartISO={weekStartISO || mondayOf(dayISO)}
-          weekAppointments={weekAppointments || []}
+          weekAppointments={visibleWeek}
           slots={slots}
           startH={startH}
           endH={endH}
@@ -162,6 +232,7 @@ export function AgendaView({
               if ((r as any)?.error) setError((r as any).error);
             });
           }}
+          onMove={onMove}
           error={error}
           onCloseError={() => setError(null)}
         />
@@ -176,7 +247,7 @@ export function AgendaView({
 
 function DayView({
   dayISO, appointments, barbers, slots, startH, endH, workingDays, dayIsClosed, isToday,
-  menuFor, setMenuFor, pending, onPick, error, onCloseError
+  menuFor, setMenuFor, pending, onPick, onMove, error, onCloseError
 }: {
   dayISO: string;
   appointments: A[];
@@ -191,6 +262,7 @@ function DayView({
   setMenuFor: (v: string | null) => void;
   pending: boolean;
   onPick: (id: string, next: StatusOption) => void;
+  onMove: (apptId: string, target: { dayISO: string; minutes: number; columnId: string; columnKind: 'barber' | 'day' }) => void;
   error: string | null;
   onCloseError: () => void;
 }) {
@@ -310,6 +382,7 @@ function DayView({
             setMenuFor={setMenuFor}
             pending={pending}
             onPick={onPick}
+            onMove={onMove}
           />
         </div>
       )}
@@ -323,7 +396,7 @@ function DayView({
 
 function WeekView({
   weekStartISO, weekAppointments, slots, startH, endH,
-  menuFor, setMenuFor, pending, onPick, error, onCloseError
+  menuFor, setMenuFor, pending, onPick, onMove, error, onCloseError
 }: {
   weekStartISO: string;
   weekAppointments: A[];
@@ -334,6 +407,7 @@ function WeekView({
   setMenuFor: (v: string | null) => void;
   pending: boolean;
   onPick: (id: string, next: StatusOption) => void;
+  onMove: (apptId: string, target: { dayISO: string; minutes: number; columnId: string; columnKind: 'barber' | 'day' }) => void;
   error: string | null;
   onCloseError: () => void;
 }) {
@@ -415,6 +489,7 @@ function WeekView({
           setMenuFor={setMenuFor}
           pending={pending}
           onPick={onPick}
+          onMove={onMove}
         />
       </div>
     </>
@@ -437,8 +512,19 @@ type GridColumn = {
   compact?: boolean;
 };
 
+type DragState = {
+  apptId: string;
+  durationMin: number;
+  // Offset entre el clientY del pointerdown y el top de la card.
+  // Lo usamos para que el ghost no salte al cursor: respetamos dónde
+  // agarró el dueño la tarjeta.
+  pointerOffsetY: number;
+  // Resultado actual del snap (null si pointer cae fuera del body).
+  target: { columnId: string; columnKind: 'barber' | 'day'; minutes: number; colIdx: number } | null;
+};
+
 function CalendarGrid({
-  slots, startH, columns, dayISO, nowLineTop, menuFor, setMenuFor, pending, onPick
+  slots, startH, columns, dayISO, nowLineTop, menuFor, setMenuFor, pending, onPick, onMove
 }: {
   slots: Array<{ h: number; m: number; label: string }>;
   startH: number;
@@ -449,6 +535,7 @@ function CalendarGrid({
   setMenuFor: (v: string | null) => void;
   pending: boolean;
   onPick: (id: string, next: StatusOption) => void;
+  onMove: (apptId: string, target: { dayISO: string; minutes: number; columnId: string; columnKind: 'barber' | 'day' }) => void;
 }) {
   const timeWidth = 52;
   const colMinPx = 120;
@@ -456,6 +543,102 @@ function CalendarGrid({
 
   const totalMinutes = slots.length * SLOT_MIN;
   const bodyHeight = slots.length * SLOT_HEIGHT;
+  const windowStartMin = startH * 60;
+
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+  // Para evitar que el click "fantasma" después de un drop abra el menú.
+  const justDraggedRef = useRef(false);
+
+  const resolveTarget = (clientX: number, clientY: number, durationMin: number, pointerOffsetY: number) => {
+    const el = bodyRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const relX = clientX - rect.left;
+    const relY = clientY - rect.top - pointerOffsetY;
+    if (relX < timeWidth) return null;
+    const colsWidth = rect.width - timeWidth;
+    if (colsWidth <= 0) return null;
+    const colWidth = colsWidth / columns.length;
+    const colIdx = Math.min(columns.length - 1, Math.max(0, Math.floor((relX - timeWidth) / colWidth)));
+    const col = columns[colIdx];
+    if (!col) return null;
+    // Snap a 15min.
+    let minutesIntoBody = (relY / SLOT_HEIGHT) * SLOT_MIN;
+    minutesIntoBody = Math.round(minutesIntoBody / 15) * 15;
+    // Clamp para que el turno completo entre en la ventana.
+    const minMin = 0;
+    const maxMin = totalMinutes - durationMin;
+    if (maxMin < 0) return null;
+    minutesIntoBody = Math.max(minMin, Math.min(maxMin, minutesIntoBody));
+    return {
+      columnId: col.id,
+      columnKind: col.kind,
+      minutes: windowStartMin + minutesIntoBody,
+      colIdx
+    };
+  };
+
+  const startDrag = (apptId: string, ev: React.PointerEvent, durationMin: number, cardTop: number) => {
+    if (ev.button !== 0) return;
+    if (typeof window !== 'undefined' && !window.matchMedia('(pointer: fine)').matches) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    // Distancia entre el pointer y el top de la card al agarrarla.
+    const pointerOffsetY = (ev.clientY - rect.top) - cardTop;
+
+    let entered = false;
+    const originX = ev.clientX;
+    const originY = ev.clientY;
+
+    const onMoveDoc = (e: PointerEvent) => {
+      const dx = e.clientX - originX;
+      const dy = e.clientY - originY;
+      if (!entered && dx * dx + dy * dy < 16) return; // threshold ~4px
+      if (!entered) {
+        entered = true;
+        document.body.style.userSelect = 'none';
+        document.body.style.cursor = 'grabbing';
+      }
+      const target = resolveTarget(e.clientX, e.clientY, durationMin, pointerOffsetY);
+      setDrag(prev => prev && prev.apptId === apptId ? { ...prev, target } : prev);
+    };
+
+    const onUpDoc = (e: PointerEvent) => {
+      window.removeEventListener('pointermove', onMoveDoc);
+      window.removeEventListener('pointerup', onUpDoc);
+      window.removeEventListener('pointercancel', onUpDoc);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      if (entered) {
+        const target = resolveTarget(e.clientX, e.clientY, durationMin, pointerOffsetY);
+        if (target) {
+          const col = columns[target.colIdx];
+          if (col) {
+            const targetDay = col.kind === 'day' ? col.id : dayISO;
+            onMove(apptId, {
+              dayISO: targetDay,
+              minutes: target.minutes,
+              columnId: col.id,
+              columnKind: col.kind
+            });
+          }
+        }
+        justDraggedRef.current = true;
+        // El click sintético llega después del pointerup. Lo limpiamos en
+        // el siguiente tick para que el handler del botón lo ignore.
+        setTimeout(() => { justDraggedRef.current = false; }, 0);
+      }
+      setDrag(null);
+    };
+
+    window.addEventListener('pointermove', onMoveDoc);
+    window.addEventListener('pointerup', onUpDoc);
+    window.addEventListener('pointercancel', onUpDoc);
+
+    setDrag({ apptId, durationMin, pointerOffsetY, target: null });
+  };
 
   return (
     <div className="bg-dark-card border border-dark-line rounded-l overflow-hidden">
@@ -474,7 +657,7 @@ function CalendarGrid({
           </div>
 
           {/* Body */}
-          <div className="grid relative" style={{ gridTemplateColumns, height: bodyHeight }}>
+          <div ref={bodyRef} className="grid relative" style={{ gridTemplateColumns, height: bodyHeight }}>
             {/* Columna de horarios */}
             <div className="border-r border-dark-line relative">
               {slots.map((s, rowIdx) => (
@@ -488,7 +671,7 @@ function CalendarGrid({
             </div>
 
             {/* Columnas de datos */}
-            {columns.map(c => (
+            {columns.map((c, colIdx) => (
               <div key={c.id} className="relative border-r border-dark-line last:border-r-0">
                 {/* Background cells (click → nuevo turno) */}
                 {slots.map((s, rowIdx) => {
@@ -503,8 +686,8 @@ function CalendarGrid({
                       href={href}
                       tabIndex={-1}
                       aria-label="Crear turno"
-                      className={`absolute left-0 right-0 ${s.m === 0 ? 'border-t border-dark-line/60' : 'border-t border-dark-line/20'} hover:bg-dark/40 transition group`}
-                      style={{ top: rowIdx * SLOT_HEIGHT, height: SLOT_HEIGHT }}>
+                      className={`absolute left-0 right-0 ${s.m === 0 ? 'border-t border-dark-line/60' : 'border-t border-dark-line/20'} ${drag ? '' : 'hover:bg-dark/40'} transition group`}
+                      style={{ top: rowIdx * SLOT_HEIGHT, height: SLOT_HEIGHT, pointerEvents: drag ? 'none' : undefined }}>
                       <span className="opacity-0 group-hover:opacity-60 absolute right-1 top-1 text-dark-muted text-[10px]">+</span>
                     </Link>
                   );
@@ -516,7 +699,6 @@ function CalendarGrid({
                   const endDate = new Date(a.ends_at);
                   const startMin = startDate.getHours() * 60 + startDate.getMinutes();
                   const endMin = endDate.getHours() * 60 + endDate.getMinutes();
-                  const windowStartMin = startH * 60;
                   const windowEndMin = windowStartMin + totalMinutes;
                   const visibleStart = Math.max(startMin, windowStartMin);
                   const visibleEnd = Math.min(endMin, windowEndMin);
@@ -525,6 +707,8 @@ function CalendarGrid({
                   const top = ((visibleStart - windowStartMin) / SLOT_MIN) * SLOT_HEIGHT;
                   const height = ((visibleEnd - visibleStart) / SLOT_MIN) * SLOT_HEIGHT;
                   const hue = a.barbers?.hue ?? c.hue ?? 55;
+                  const durationMin = Math.max(15, endMin - startMin);
+                  const isBeingDragged = drag?.apptId === a.id;
 
                   return (
                     <AppointmentCard
@@ -535,13 +719,35 @@ function CalendarGrid({
                       hue={hue}
                       compact={c.compact}
                       menuOpen={menuFor === a.id}
-                      onToggleMenu={() => setMenuFor(menuFor === a.id ? null : a.id)}
+                      onToggleMenu={() => {
+                        if (justDraggedRef.current) return;
+                        setMenuFor(menuFor === a.id ? null : a.id);
+                      }}
                       onCloseMenu={() => setMenuFor(null)}
                       disabled={pending}
                       onPick={(next) => onPick(a.id, next)}
+                      onPointerDownDrag={(ev) => startDrag(a.id, ev, durationMin, top)}
+                      isBeingDragged={isBeingDragged}
+                      anyDragging={!!drag}
                     />
                   );
                 })}
+
+                {/* Ghost del drop target en esta columna */}
+                {drag?.target && drag.target.colIdx === colIdx && (() => {
+                  const ghostTop = ((drag.target.minutes - windowStartMin) / SLOT_MIN) * SLOT_HEIGHT;
+                  const ghostHeight = (drag.durationMin / SLOT_MIN) * SLOT_HEIGHT;
+                  const hh = Math.floor(drag.target.minutes / 60);
+                  const mm = drag.target.minutes % 60;
+                  const label = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+                  return (
+                    <div
+                      className="absolute left-0.5 right-0.5 z-20 rounded-s border-2 border-dashed border-accent bg-accent/15 pointer-events-none flex items-start px-1.5 py-1"
+                      style={{ top: ghostTop, height: Math.max(ghostHeight, 28) }}>
+                      <span className="font-mono text-[10px] text-accent">{label}</span>
+                    </div>
+                  );
+                })()}
               </div>
             ))}
 
@@ -565,7 +771,8 @@ function CalendarGrid({
 }
 
 function AppointmentCard({
-  appointment, top, height, hue, compact, menuOpen, onToggleMenu, onCloseMenu, disabled, onPick
+  appointment, top, height, hue, compact, menuOpen, onToggleMenu, onCloseMenu, disabled, onPick,
+  onPointerDownDrag, isBeingDragged, anyDragging
 }: {
   appointment: A;
   top: number;
@@ -577,6 +784,9 @@ function AppointmentCard({
   onCloseMenu: () => void;
   disabled: boolean;
   onPick: (next: StatusOption) => void;
+  onPointerDownDrag: (e: React.PointerEvent) => void;
+  isBeingDragged: boolean;
+  anyDragging: boolean;
 }) {
   const now = Date.now();
   const startMs = new Date(appointment.starts_at).getTime();
@@ -589,25 +799,32 @@ function AppointmentCard({
   const baseBg = `oklch(0.3 0.04 ${hue})`;
   const baseBorder = `oklch(0.7 0.1 ${hue})`;
 
+  // Turnos cerrados (completados / cancelados / no_show) no se mueven —
+  // son terminales también del lado del server. Permitir el drag llevaría
+  // al usuario a ver un error después del soltar.
+  const draggable = !disabled && !isDone && !isNoShow && appointment.status !== 'cancelled';
+
   return (
     <div
-      className="absolute left-0.5 right-0.5 z-10"
+      className={`absolute left-0.5 right-0.5 z-10 ${isBeingDragged ? 'opacity-30' : ''} ${anyDragging && !isBeingDragged ? 'opacity-70' : ''}`}
       style={{ top, height: Math.max(height, 28) }}>
       <button
         type="button"
+        onPointerDown={draggable ? onPointerDownDrag : undefined}
         onClick={onToggleMenu}
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={menuOpen}
         aria-label={`Turno ${appointment.customer_name} a las ${time}. Tocá para cambiar estado.`}
-        className={`w-full h-full rounded-s text-left px-1.5 py-1 transition active:scale-[0.99] overflow-hidden
+        className={`w-full h-full rounded-s text-left px-1.5 py-1 transition active:scale-[0.99] overflow-hidden ${draggable ? 'cursor-grab active:cursor-grabbing' : ''}
           ${isInProgress ? 'bg-accent text-white' :
             isDone ? 'opacity-60' :
             isNoShow ? 'opacity-50' : ''}`}
         style={{
           background: isInProgress ? undefined : baseBg,
           color: isInProgress ? undefined : '#F5F3EE',
-          borderLeft: isInProgress ? undefined : `3px solid ${baseBorder}`
+          borderLeft: isInProgress ? undefined : `3px solid ${baseBorder}`,
+          touchAction: 'manipulation'
         }}>
         {compact ? (
           <div className="flex flex-col min-w-0">

@@ -279,6 +279,108 @@ export async function cancelAppointment(id: string) {
   return { ok: true };
 }
 
+const MoveSchema = z.object({
+  id:        z.string().uuid(),
+  startsAt:  z.string().datetime(),
+  barberId:  z.string().uuid().optional()
+});
+
+export async function moveAppointment(input: z.infer<typeof MoveSchema>) {
+  const parsed = MoveSchema.safeParse(input);
+  if (!parsed.success) return { error: 'Datos inválidos.' };
+  const { id, startsAt, barberId: maybeBarberId } = parsed.data;
+
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: 'No autenticado' };
+
+  // Solo admins pueden mover; y solo dentro de su shop.
+  const { data: profile } = await supabase
+    .from('profiles').select('is_admin, shop_id').eq('id', user.id)
+    .maybeSingle<{ is_admin: boolean; shop_id: string | null }>();
+  if (!profile?.is_admin || !profile.shop_id) return { error: 'Solo admins' };
+
+  const admin = createAdminClient();
+  const { data: appt } = await admin
+    .from('appointments')
+    .select('id, shop_id, barber_id, service_id, status, starts_at')
+    .eq('id', id)
+    .eq('shop_id', profile.shop_id)
+    .maybeSingle<{ id: string; shop_id: string; barber_id: string; service_id: string; status: string; starts_at: string }>();
+  if (!appt) return { error: 'Turno no encontrado' };
+  if (TERMINAL_STATUSES.has(appt.status)) {
+    return { error: 'Ese turno ya está cerrado y no se puede mover.' };
+  }
+
+  const { data: service } = await admin
+    .from('services').select('id, duration_mins, is_active')
+    .eq('id', appt.service_id).maybeSingle<{ id: string; duration_mins: number; is_active: boolean }>();
+  if (!service) return { error: 'Servicio no disponible.' };
+
+  const newStart = new Date(startsAt);
+  if (isNaN(newStart.getTime())) return { error: 'Fecha inválida.' };
+  const now = new Date();
+  const maxFuture = new Date(now.getTime() + 180 * 24 * 60 * 60_000);
+  if (newStart.getTime() < now.getTime() - 60_000) return { error: 'La fecha es pasada.' };
+  if (newStart.getTime() > maxFuture.getTime()) return { error: 'La fecha es demasiado lejana.' };
+  const newEnd = new Date(newStart.getTime() + service.duration_mins * 60_000);
+
+  const targetBarberId = maybeBarberId || appt.barber_id;
+  const { data: barber } = await admin
+    .from('barbers').select('id').eq('id', targetBarberId).eq('shop_id', appt.shop_id).eq('is_active', true).maybeSingle();
+  if (!barber) return { error: 'Ese barbero no pertenece a esta barbería.' };
+
+  // Schedule del barbero ese día (en hora ARG, igual que en createBooking).
+  const startAR = partsInAR(newStart);
+  const endAR = partsInAR(newEnd);
+  const { data: schedule } = await admin
+    .from('schedules')
+    .select('start_time, end_time, is_working')
+    .eq('shop_id', appt.shop_id)
+    .eq('barber_id', targetBarberId)
+    .eq('day_of_week', startAR.dow)
+    .maybeSingle();
+  if (!schedule || !schedule.is_working) return { error: 'El barbero no trabaja ese día.' };
+  const slotStart = `${startAR.hh}:${startAR.mm}`;
+  const slotEnd = `${endAR.hh}:${endAR.mm}`;
+  if (slotStart < schedule.start_time || slotEnd > schedule.end_time) {
+    return { error: 'Ese horario está fuera del horario del barbero.' };
+  }
+
+  // Conflictos: cualquier otro turno activo del mismo barbero que se solape.
+  const { data: conflicts } = await admin
+    .from('appointments')
+    .select('id')
+    .eq('shop_id', appt.shop_id)
+    .eq('barber_id', targetBarberId)
+    .neq('status', 'cancelled')
+    .neq('id', id)
+    .lt('starts_at', newEnd.toISOString())
+    .gt('ends_at', newStart.toISOString())
+    .limit(1);
+  if (conflicts && conflicts.length > 0) {
+    return { error: 'Ese horario ya está ocupado.' };
+  }
+
+  const { error: updErr } = await admin
+    .from('appointments')
+    .update({
+      barber_id: targetBarberId,
+      starts_at: newStart.toISOString(),
+      ends_at: newEnd.toISOString()
+    })
+    .eq('id', id);
+  if (updErr) {
+    if (updErr.message.toLowerCase().includes('exclude')) {
+      return { error: 'Ese horario se acaba de ocupar.' };
+    }
+    return { error: updErr.message };
+  }
+
+  revalidatePath('/shop');
+  return { ok: true };
+}
+
 // Estados terminales: una vez que un turno cae acá, no se puede mover más.
 // Evita que un admin marque "completed" → "pending" por error y rompa
 // reportes / caja.

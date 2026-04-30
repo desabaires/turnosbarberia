@@ -277,12 +277,17 @@ function ServicesSection({ services, onToast }: { services: Service[]; onToast: 
 
 function TeamSection({ barbers, onToast }: { barbers: Barber[]; onToast: (t: { tone: 'success' | 'error'; text: string }) => void }) {
   const [pending, start] = useTransition();
-  const [draft, setDraft] = useState<{ id?: string; name: string; role: string } | null>(null);
+  const [draft, setDraft] = useState<{ id?: string; name: string; role: string; commission_pct: number } | null>(null);
 
   const save = () => {
     if (!draft) return;
     start(async () => {
-      const r = await upsertBarber({ id: draft.id, name: draft.name, role: draft.role });
+      const r = await upsertBarber({
+        id: draft.id,
+        name: draft.name,
+        role: draft.role,
+        commission_pct: draft.commission_pct
+      });
       if (r?.error) onToast({ tone: 'error', text: r.error });
       else { onToast({ tone: 'success', text: draft.id ? 'Barbero actualizado' : 'Barbero agregado' }); setDraft(null); }
     });
@@ -309,9 +314,11 @@ function TeamSection({ barbers, onToast }: { barbers: Barber[]; onToast: (t: { t
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-[14px] font-semibold text-bg truncate">{b.name}</div>
-            <div className="text-[11px] text-dark-muted mt-0.5 truncate">{b.role || '—'}</div>
+            <div className="text-[11px] text-dark-muted mt-0.5 truncate">
+              {b.role || '—'}<span className="text-dark-muted/60"> · </span>{Number(b.commission_pct).toFixed(0)}%
+            </div>
           </div>
-          <button type="button" onClick={() => setDraft({ id: b.id, name: b.name, role: b.role || '' })}
+          <button type="button" onClick={() => setDraft({ id: b.id, name: b.name, role: b.role || '', commission_pct: Number(b.commission_pct ?? 50) })}
             className="text-[11px] px-2.5 py-1.5 rounded-xs border border-dark-line text-bg hover:border-bg/30 transition">
             Editar
           </button>
@@ -324,7 +331,7 @@ function TeamSection({ barbers, onToast }: { barbers: Barber[]; onToast: (t: { t
 
       {!draft && (
         <button type="button"
-          onClick={() => setDraft({ name: '', role: '' })}
+          onClick={() => setDraft({ name: '', role: '', commission_pct: 50 })}
           className="mt-1 rounded-xl border border-dashed border-dark-line px-4 py-3 text-[13px] text-dark-muted flex items-center justify-center gap-2 hover:border-bg/30 hover:text-bg transition">
           <Icon name="plus" size={16} /> Agregar barbero
         </button>
@@ -342,6 +349,19 @@ function TeamSection({ barbers, onToast }: { barbers: Barber[]; onToast: (t: { t
           <Field label="Rol (opcional)">
             <input value={draft.role} onChange={e => setDraft({ ...draft, role: e.target.value })}
               className="bg-transparent text-bg w-full outline-none text-[14px]" placeholder="Senior · 5 años" />
+          </Field>
+          <Field label="Comisión por corte (%)">
+            <input
+              type="number"
+              min={0}
+              max={100}
+              step={1}
+              inputMode="numeric"
+              value={Number.isFinite(draft.commission_pct) ? draft.commission_pct : 50}
+              onChange={e => setDraft({ ...draft, commission_pct: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+              className="bg-transparent text-bg w-full outline-none text-[14px] font-mono"
+              placeholder="50"
+            />
           </Field>
           <div className="flex gap-2 mt-1">
             <button type="button" onClick={save} disabled={pending}

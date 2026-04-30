@@ -1,13 +1,14 @@
 import { Avatar } from '@/components/shared/Avatar';
 import { Icon } from '@/components/shared/Icon';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { money } from '@/lib/format';
 import type { Barber, Schedule } from '@/types/db';
 
 const DAY_LABELS = ['L','M','M','J','V','S','D']; // Mon..Sun
 const SLOTS_PER_DAY = 20; // 10h * 2 slots/h
 
 export function TeamView({
-  barbers, weekAppts, schedules, startOfWeek, todayISO, tomorrowISO
+  barbers, weekAppts, schedules, startOfWeek, todayISO, tomorrowISO, monthStats
 }: {
   barbers: Barber[];
   weekAppts: { id: string; barber_id: string; starts_at: string; status: string }[];
@@ -15,6 +16,8 @@ export function TeamView({
   startOfWeek: string;
   todayISO: string;
   tomorrowISO: string;
+  /** Stats del mes actual por barbero — cortes completados y revenue de servicios. */
+  monthStats?: Record<string, { count: number; revenue: number }>;
 }) {
   const start = new Date(startOfWeek);
   const todayDate = new Date(todayISO);
@@ -64,6 +67,10 @@ export function TeamView({
 
         const occupancy = Math.min(100, Math.round((weekCount * 100) / (SLOTS_PER_DAY * working.size || 1)));
 
+        const month = monthStats?.[b.id] || { count: 0, revenue: 0 };
+        const commissionPct = Number(b.commission_pct ?? 50);
+        const toPay = Math.round((month.revenue * commissionPct) / 100);
+
         return (
           <div key={b.id} className="bg-dark-card border border-dark-line rounded-2xl px-4 py-3.5 mb-2.5">
             <div className="flex items-center gap-3">
@@ -82,6 +89,25 @@ export function TeamView({
               <Stat l="Hoy"      v={todayCount}/>
               <Stat l="Semana"   v={weekCount}/>
               <Stat l="Ocupación" v={`${occupancy}%`}/>
+            </div>
+
+            {/* Comisión del mes corriente. Solo cuenta turnos completados —
+                los confirmados todavía no son ingreso real. */}
+            <div className="mt-3 bg-dark rounded-s px-3 py-2.5 border border-dark-line/60">
+              <div className="flex items-baseline justify-between">
+                <div className="text-[9px] text-dark-muted uppercase tracking-[1.5px]">Mes en curso</div>
+                <div className="font-mono text-[10px] text-dark-muted">{commissionPct.toFixed(0)}%</div>
+              </div>
+              <div className="flex items-end justify-between mt-1.5 gap-2">
+                <div>
+                  <div className="font-display text-[22px] text-bg leading-none">{month.count}</div>
+                  <div className="text-[10px] text-dark-muted mt-1">cortes · {money(month.revenue)}</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-display text-[22px] text-accent leading-none">{money(toPay)}</div>
+                  <div className="text-[10px] text-dark-muted mt-1">a pagar</div>
+                </div>
+              </div>
             </div>
 
             <div className="flex items-center gap-1.5 mt-3 text-[11px] text-dark-muted">

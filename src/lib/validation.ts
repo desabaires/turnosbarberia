@@ -110,7 +110,8 @@ export const UpsertBarberSchema = z.object({
   name: shopNameSchema,
   role: z.string().trim().max(60).optional().or(z.literal('')),
   initials: z.string().trim().max(4).optional(),
-  hue: z.coerce.number().int().min(0).max(360).optional()
+  hue: z.coerce.number().int().min(0).max(360).optional(),
+  commission_pct: z.coerce.number().min(0, 'Mínimo 0%').max(100, 'Máximo 100%').optional()
 });
 
 export const UpdateSchedulesItemSchema = z.object({

@@ -87,10 +87,14 @@ export async function signupOwner(formData: FormData) {
 
   const supabase = createClient();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+  // Después del magic link, el dueño tiene que SETEAR su contraseña antes
+  // de seguir al onboarding. Mandar a `/onboarding` directo dejaba al user
+  // logueado vía OTP sin contraseña — y al desloguearse, no podía volver
+  // a entrar con email+contraseña porque nunca la creó.
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
-      emailRedirectTo: `${siteUrl}/auth/callback?next=/onboarding`,
+      emailRedirectTo: `${siteUrl}/auth/callback?next=/cuenta/establecer-password`,
       data: { name, phone }
     }
   });
@@ -284,5 +288,38 @@ export async function updatePassword(formData: FormData) {
   }
 
   await supabase.auth.signOut();
+  return { ok: true };
+}
+
+// Setea la contraseña por PRIMERA vez para un dueño que se acaba de
+// registrar vía magic link. A diferencia de `updatePassword`, NO desloguea
+// al user — queremos que siga al onboarding sin re-login. Solo se permite
+// si el user actual no tiene una contraseña previa configurada (para no
+// abrir un bypass al flow de recovery).
+export async function establishPassword(formData: FormData) {
+  const password = String(formData.get('password') || '');
+  const confirm  = String(formData.get('confirm')  || '');
+
+  if (password.length < 8) {
+    return { error: 'La contraseña tiene que tener al menos 8 caracteres' };
+  }
+  if (password.length > 72) {
+    return { error: 'La contraseña es demasiado larga (máx 72 caracteres)' };
+  }
+  if (password !== confirm) {
+    return { error: 'Las contraseñas no coinciden' };
+  }
+
+  const supabase = createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) {
+    return { error: 'Tu sesión expiró. Pedí un nuevo link.' };
+  }
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) {
+    return { error: 'No pudimos guardar la contraseña. Probá de nuevo.' };
+  }
+
   return { ok: true };
 }

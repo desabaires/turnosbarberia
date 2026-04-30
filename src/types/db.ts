@@ -38,6 +38,7 @@ export type Barber = {
   bio: string | null;
   is_active: boolean;
   rating: number;
+  commission_pct: number;
   created_at: string;
 };
 

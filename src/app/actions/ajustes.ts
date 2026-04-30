@@ -137,6 +137,7 @@ export async function upsertBarber(input: {
   id?: string;
   name: string;
   role?: string;
+  commission_pct?: number;
 }) {
   const shop = await getAdminShop();
   if (!shop) return { error: 'No autorizado' };
@@ -150,9 +151,11 @@ export async function upsertBarber(input: {
 
   if (d.id) {
     // Edit: no cuenta contra el límite del plan.
+    const update: Record<string, any> = { name: d.name, role, initials: initialsFrom(d.name) };
+    if (d.commission_pct != null) update.commission_pct = d.commission_pct;
     const { error } = await supabase
       .from('barbers')
-      .update({ name: d.name, role, initials: initialsFrom(d.name) })
+      .update(update)
       .eq('id', d.id)
       .eq('shop_id', shop.id);
     if (error) return { error: error.message };
@@ -196,7 +199,8 @@ export async function upsertBarber(input: {
         role,
         initials: initialsFrom(d.name),
         hue: Math.floor(Math.random() * 360),
-        is_active: true
+        is_active: true,
+        commission_pct: d.commission_pct ?? 50
       })
       .select('id')
       .maybeSingle<{ id: string }>();
